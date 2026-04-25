@@ -10,8 +10,7 @@ services:
   backend:
     image: ghcr.io/${GHCR_OWNER:-macedot}/ports/backend:${IMAGE_TAG:-latest}
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
     container_name: ports-backend
     pid: "host"
     network_mode: "host"
