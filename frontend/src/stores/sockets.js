@@ -12,6 +12,9 @@ export const useSocketsStore = defineStore('sockets', () => {
   const error = ref(null)
   const isLoading = ref(false)
   const collapsedGroups = ref(new Set())
+  const searchQuery = ref('')
+  const searchRegex = ref(null)
+  const searchError = ref(null)
 
   // Getters
   const filteredSockets = computed(() => {
@@ -23,6 +26,13 @@ export const useSocketsStore = defineStore('sockets', () => {
       // IP version filter
       if (ipVerFilter.value === '4' && sock.protocol.endsWith('6')) return false
       if (ipVerFilter.value === '6' && !sock.protocol.endsWith('6')) return false
+
+      // Regex search filter (matches against all text fields)
+      if (searchRegex.value) {
+        const re = searchRegex.value
+        const haystack = `${sock.protocol} ${sock.local_addr} ${sock.local_port} ${sock.remote_addr} ${sock.remote_port} ${sock.state} ${sock.process}`
+        if (!re.test(haystack)) return false
+      }
 
       return true
     })
@@ -118,6 +128,22 @@ export const useSocketsStore = defineStore('sockets', () => {
     }
   }
 
+  function setSearchQuery(value) {
+    searchQuery.value = value
+    if (!value || value.trim() === '') {
+      searchRegex.value = null
+      searchError.value = null
+      return
+    }
+    try {
+      searchRegex.value = new RegExp(value, 'i')
+      searchError.value = null
+    } catch (e) {
+      searchRegex.value = null
+      searchError.value = e.message
+    }
+  }
+
   function toggleSort(key) {
     const sortableKeys = ['protocol', 'local_addr', 'local_port', 'remote_addr', 'remote_port', 'state', 'process']
     if (!sortableKeys.includes(key)) return
@@ -170,6 +196,9 @@ export const useSocketsStore = defineStore('sockets', () => {
     error,
     isLoading,
     collapsedGroups,
+    searchQuery,
+    searchRegex,
+    searchError,
     // Getters
     filteredSockets,
     sortedSockets,
@@ -179,6 +208,7 @@ export const useSocketsStore = defineStore('sockets', () => {
     setSockets,
     setProtoFilter,
     setIPVerFilter,
+    setSearchQuery,
     toggleSort,
     setError,
     clearError,

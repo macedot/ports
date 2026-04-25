@@ -1,6 +1,17 @@
 <template>
   <div class="socket-table-container">
     <div class="table-header">
+      <div class="search-row">
+        <span class="search-icon">⌕</span>
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Regex filter (e.g. :80|nginx|LISTEN)..."
+          :value="store.searchQuery"
+          @input="store.setSearchQuery($event.target.value)"
+        />
+        <span v-if="store.searchError" class="search-error">{{ store.searchError }}</span>
+      </div>
       <div class="header-row">
         <div class="header-cell sortable" @click="store.toggleSort('protocol')">
           <span>Protocol</span>
@@ -105,6 +116,7 @@ const getSortIndicator = (key) => {
 .table-header {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   background-color: #1a1a2e;
@@ -143,6 +155,53 @@ const getSortIndicator = (key) => {
 .sort-indicator {
   font-size: 10px;
   color: #4a4a6a;
+}
+
+.search-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: #1a1a2e;
+  border-bottom: 1px solid #2d2d44;
+}
+
+.search-icon {
+  color: #606080;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: #12122a;
+  border: 1px solid #2d2d44;
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #e0e0e0;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #4a9eff;
+}
+
+.search-input::placeholder {
+  color: #4a4a6a;
+}
+
+.search-error {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: #ef4444;
+  flex-shrink: 0;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fold-all-btn {
@@ -228,5 +287,26 @@ const getSortIndicator = (key) => {
   background: #2d2d44;
   padding: 2px 6px;
   border-radius: 3px;
+}
+</style>
+
+<style>
+/* Visible scrollbar for dark theme */
+.vue-recycle-scroller {
+  scrollbar-color: #3d3d54 #0f0f1a;
+  scrollbar-width: thin;
+}
+.vue-recycle-scroller::-webkit-scrollbar {
+  width: 8px;
+}
+.vue-recycle-scroller::-webkit-scrollbar-track {
+  background: #0f0f1a;
+}
+.vue-recycle-scroller::-webkit-scrollbar-thumb {
+  background: #3d3d54;
+  border-radius: 4px;
+}
+.vue-recycle-scroller::-webkit-scrollbar-thumb:hover {
+  background: #5a5a7a;
 }
 </style>
