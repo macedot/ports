@@ -16,6 +16,7 @@
 !.github/
 !.github/workflows/
 !.github/workflows/**
+!.github/workflows/*.yml
 
 # Backend (Go)
 !backend/
@@ -36,15 +37,10 @@
 !frontend/package-lock.json
 !frontend/index.html
 !frontend/vite.config.js
-!frontend/Dockerfile
 !frontend/src/
 !frontend/src/**
 !frontend/public/
 !frontend/public/**
-
-# Nginx
-!nginx/
-!nginx/**
 
 # ── Re-deny generated / OS artifacts within allowed dirs ──
 

@@ -1,4 +1,4 @@
-name: Build and Push Docker Images
+name: Build and Push Docker Image
 
 on:
   release:
@@ -30,21 +30,12 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push backend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./backend
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}/backend:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository }}/backend:latest
-
-      - name: Build and push frontend
+      - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: frontend/Dockerfile
+          file: backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/frontend:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository }}/frontend:latest
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest

@@ -1,34 +1,27 @@
 # syntax=docker/dockerfile:1
 
-# Build stage
-FROM golang:alpine AS builder
-
+# Stage 1: Build Vue.js frontend
+FROM node:20-alpine AS frontend-build
 WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm install --ignore-optional
+COPY frontend/ .
+RUN npm run build
 
-# Copy go mod files first for dependency caching
-COPY go.mod go.sum ./
+# Stage 2: Build Go binary with embedded frontend
+FROM golang:alpine AS backend-build
+WORKDIR /app
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build with CGO disabled for static binary
+COPY backend/ .
+# Copy frontend dist into the ui/dist directory for go:embed
+COPY --from=frontend-build /app/dist ./ui/dist/
 ENV CGO_ENABLED=0
 RUN go build -ldflags="-w -s" -o /app/server .
 
-# Runtime stage
+# Stage 3: Minimal runtime
 FROM gcr.io/distroless/static-debian12
-
-# The container needs access to /proc/net/* for socket parsing.
-# Run with --pid=host to access host PID namespace.
-#
-# Example:
-#   docker run --pid=host listen-ports:latest
-
 ENV PORT=8080
-
 EXPOSE 8080
-
-COPY --from=builder /app/server /app/server
-
+COPY --from=backend-build /app/server /app/server
 ENTRYPOINT ["/app/server"]
