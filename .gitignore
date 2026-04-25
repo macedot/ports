@@ -9,6 +9,7 @@
 # Root
 !.gitignore
 !LICENSE
+!README.md
 !docker-compose.yml
 
 # GitHub Actions
