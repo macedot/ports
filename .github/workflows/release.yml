@@ -43,6 +43,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: frontend/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/frontend:${{ steps.version.outputs.version }}
