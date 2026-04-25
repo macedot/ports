@@ -3,16 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"listen-ports/internal/api"
 	"listen-ports/internal/cache"
 	"listen-ports/internal/parser"
+	"listen-ports/ui"
 )
 
 func main() {
@@ -52,7 +55,8 @@ func main() {
 	h := api.NewHandler(c)
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/sockets", corsMiddleware(h))
+	mux.Handle("/api/sockets", h)
+	mux.Handle("/", spaHandler())
 
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -80,16 +84,33 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+func spaHandler() http.Handler {
+	distFS, err := fs.Sub(ui.DistFS, "dist")
+	if err != nil {
+		log.Fatalf("Failed to create sub FS: %v", err)
+	}
+	fileServer := http.FileServer(http.FS(distFS))
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+
+		path := r.URL.Path
+
+		if path != "/" {
+			stripped := strings.TrimPrefix(path, "/")
+			if f, err := distFS.Open(stripped); err == nil {
+				f.Close()
+				if strings.Contains(stripped, "assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				}
+				fileServer.ServeHTTP(w, r)
+				return
+			}
 		}
 
-		next.ServeHTTP(w, r)
+		r.URL.Path = "/"
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		fileServer.ServeHTTP(w, r)
 	})
 }

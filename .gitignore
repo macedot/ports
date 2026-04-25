@@ -27,6 +27,8 @@
 !backend/internal/**
 !backend/cmd/
 !backend/cmd/**
+!backend/ui/
+!backend/ui/**
 
 # Frontend (Vue.js / Vite)
 !frontend/
