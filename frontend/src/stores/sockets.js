@@ -11,6 +11,7 @@ export const useSocketsStore = defineStore('sockets', () => {
   const updatedAt = ref(null)
   const error = ref(null)
   const isLoading = ref(false)
+  const collapsedGroups = ref(new Set())
 
   // Getters
   const filteredSockets = computed(() => {
@@ -62,8 +63,8 @@ export const useSocketsStore = defineStore('sockets', () => {
       portCounts.set(s.local_port, (portCounts.get(s.local_port) || 0) + 1)
     }
 
-    let socketIdx = 0
-    for (const s of sortedSockets.value) {
+    for (let i = 0; i < sortedSockets.value.length; i++) {
+      const s = sortedSockets.value[i]
       if (currentGroup !== s.local_port) {
         // Close previous group if exists
         if (currentGroup !== null) {
@@ -78,13 +79,24 @@ export const useSocketsStore = defineStore('sockets', () => {
         })
         currentGroup = s.local_port
       }
-      result.push({
-        ...s,
-        _type: 'socket',
-        _key: `${s.protocol}-${s.local_addr}:${s.local_port}-${s.remote_addr}:${s.remote_port}-${socketIdx++}`
-      })
+      // Only include socket item if group is not collapsed
+      if (!collapsedGroups.value.has(s.local_port)) {
+        result.push({
+          ...s,
+          _type: 'socket',
+          _key: `${s.protocol}-${s.local_addr}:${s.local_port}-${s.remote_addr}:${s.remote_port}-${i}`
+        })
+      }
     }
     return result
+  })
+
+  const groupCount = computed(() => {
+    const ports = new Set()
+    for (const s of sortedSockets.value) {
+      ports.add(s.local_port)
+    }
+    return ports.size
   })
 
   // Actions
@@ -126,6 +138,27 @@ export const useSocketsStore = defineStore('sockets', () => {
     error.value = null
   }
 
+  function toggleGroup(port) {
+    if (collapsedGroups.value.has(port)) {
+      collapsedGroups.value.delete(port)
+    } else {
+      collapsedGroups.value.add(port)
+    }
+    collapsedGroups.value = new Set(collapsedGroups.value)
+  }
+
+  function collapseAll() {
+    const ports = new Set()
+    for (const s of sortedSockets.value) {
+      ports.add(s.local_port)
+    }
+    collapsedGroups.value = ports
+  }
+
+  function expandAll() {
+    collapsedGroups.value = new Set()
+  }
+
   return {
     // State
     sockets,
@@ -136,16 +169,21 @@ export const useSocketsStore = defineStore('sockets', () => {
     updatedAt,
     error,
     isLoading,
+    collapsedGroups,
     // Getters
     filteredSockets,
     sortedSockets,
     filteredAndSortedSockets,
+    groupCount,
     // Actions
     setSockets,
     setProtoFilter,
     setIPVerFilter,
     toggleSort,
     setError,
-    clearError
+    clearError,
+    toggleGroup,
+    collapseAll,
+    expandAll
   }
 })

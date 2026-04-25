@@ -22,17 +22,21 @@
           <span class="sort-indicator">{{ getSortIndicator('process') }}</span>
         </div>
       </div>
+      <button class="fold-all-btn" @click="toggleAll">
+        {{ isAllCollapsed ? 'Expand All' : 'Collapse All' }}
+      </button>
     </div>
 
     <div class="table-body">
       <RecycleScroller
-        v-if="socketItemCount > 0"
+        v-if="filteredAndSortedSockets.length > 0"
         :items="filteredAndSortedSockets"
         :item-size="32"
         key-field="_key"
         v-slot="{ item }"
       >
-        <div v-if="item._type === 'group'" class="group-header">
+        <div v-if="item._type === 'group'" class="group-header" @click="store.toggleGroup(item.port)">
+          <span class="chevron">{{ collapsedGroups.has(item.port) ? '▸' : '▾' }}</span>
           <span class="port-label">Port {{ item.port }}</span>
           <span class="count-badge">{{ item.count }} connection{{ item.count !== 1 ? 's' : '' }}</span>
         </div>
@@ -58,7 +62,7 @@ import SocketRow from './SocketRow.vue'
 import { useSocketsStore } from '../stores/sockets'
 
 const store = useSocketsStore()
-const { filteredAndSortedSockets, sortKey, sortDir } = storeToRefs(store)
+const { filteredAndSortedSockets, sortKey, sortDir, collapsedGroups } = storeToRefs(store)
 
 const socketItemCount = computed(() => {
   const items = filteredAndSortedSockets.value
@@ -68,6 +72,19 @@ const socketItemCount = computed(() => {
   }
   return count
 })
+
+const isAllCollapsed = computed(() => {
+  if (store.groupCount === 0) return false
+  return collapsedGroups.value.size === store.groupCount
+})
+
+const toggleAll = () => {
+  if (isAllCollapsed.value) {
+    store.expandAll()
+  } else {
+    store.collapseAll()
+  }
+}
 
 const getSortIndicator = (key) => {
   if (sortKey.value !== key) return ''
@@ -87,8 +104,12 @@ const getSortIndicator = (key) => {
 
 .table-header {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   background-color: #1a1a2e;
   border-bottom: 1px solid #2d2d44;
+  padding-right: 12px;
 }
 
 .header-row {
@@ -124,6 +145,23 @@ const getSortIndicator = (key) => {
   color: #4a4a6a;
 }
 
+.fold-all-btn {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: #2d2d44;
+  color: #8080a0;
+  border: 1px solid #3d3d54;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fold-all-btn:hover {
+  background: #3d3d54;
+  color: #c0c0e0;
+}
+
 .table-body {
   flex: 1;
   overflow: hidden;
@@ -153,6 +191,12 @@ const getSortIndicator = (key) => {
   color: #8080a0;
 }
 
+.group-header .chevron {
+  color: #4a9eff;
+  font-size: 12px;
+  width: 12px;
+}
+
 .group-header {
   grid-column: 1 / -1;
   display: flex;
@@ -165,6 +209,11 @@ const getSortIndicator = (key) => {
   font-family: 'Courier New', monospace;
   font-size: 12px;
   color: #c0c0e0;
+  cursor: pointer;
+}
+
+.group-header:hover {
+  background: #252545;
 }
 
 .group-header .port-label {
