@@ -1,0 +1,35 @@
+version: "3.8"
+
+# Image references use GHCR (GitHub Container Registry).
+# Update the image prefix to match your GitHub repository:
+#   ghcr.io/<owner>/<repo>/backend:latest
+#   ghcr.io/<owner>/<repo>/frontend:latest
+# To build locally instead, run: docker compose up --build
+
+services:
+  backend:
+    image: ghcr.io/${GHCR_OWNER:-thiagosoft}/listen-ports/backend:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ports-backend
+    pid: "host"
+    network_mode: "host"
+    environment:
+      PORT: "8080"
+      CACHE_TTL: "2s"
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:-thiagosoft}/listen-ports/frontend:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ports-frontend
+    ports:
+      - "80:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend
+    restart: unless-stopped

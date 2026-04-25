@@ -1,0 +1,64 @@
+# ── Deny everything by default ──
+*
+
+# Allow directory traversal (git needs this to descend into subdirs)
+!*/
+
+# ── Explicitly allow only project files ──
+
+# Root
+!.gitignore
+!LICENSE
+!docker-compose.yml
+
+# GitHub Actions
+!.github/
+!.github/workflows/
+!.github/workflows/**
+
+# Backend (Go)
+!backend/
+!backend/main.go
+!backend/go.mod
+!backend/go.sum
+!backend/Dockerfile
+!backend/internal/
+!backend/internal/**
+!backend/cmd/
+!backend/cmd/**
+
+# Frontend (Vue.js / Vite)
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.js
+!frontend/Dockerfile
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**
+
+# Nginx
+!nginx/
+!nginx/**
+
+# ── Re-deny generated / OS artifacts within allowed dirs ──
+
+# Go compiled binaries
+backend/ports
+backend/ports-backend
+backend/server_test
+
+# Frontend build output and dependencies
+frontend/node_modules/
+frontend/dist/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Swarm internal (deny even if present)
+.swarm/
+SWARM_PLAN.json
+SWARM_PLAN.md

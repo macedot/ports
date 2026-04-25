@@ -1,0 +1,91 @@
+import { ref, onUnmounted } from 'vue'
+
+/**
+ * Polls the backend API every 5 seconds with tab visibility awareness.
+ * @param {import('../stores/sockets').useSocketsStore} store - Pinia sockets store
+ * @returns {{ refresh: () => void }}
+ */
+export function usePolling(store) {
+  const INTERVAL_MS = 5000
+  let intervalId = null
+  let abortController = new AbortController()
+
+  const isPolling = ref(false)
+
+  function shouldSkip() {
+    return store.isLoading
+  }
+
+  async function fetchSockets() {
+    if (shouldSkip()) {
+      return
+    }
+
+    abortController.abort()
+    const controller = new AbortController()
+    abortController = controller
+
+    store.isLoading = true
+
+    try {
+      const res = await fetch('/api/sockets', { signal: controller.signal })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+      }
+      const data = await res.json()
+      store.setSockets(data.sockets, data.updated_at)
+      store.setError(null)
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        return
+      }
+      store.setError(err.message)
+    } finally {
+      store.isLoading = false
+    }
+  }
+
+  function startPolling() {
+    if (intervalId !== null) return
+    intervalId = setInterval(fetchSockets, INTERVAL_MS)
+    isPolling.value = true
+  }
+
+  function stopPolling() {
+    if (intervalId !== null) {
+      clearInterval(intervalId)
+      intervalId = null
+      isPolling.value = false
+    }
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      fetchSockets()
+      startPolling()
+    } else {
+      stopPolling()
+    }
+  }
+
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  fetchSockets()
+  startPolling()
+
+  /**
+   * Immediately fetch and reset the interval timer.
+   */
+  function refresh() {
+    stopPolling()
+    fetchSockets()
+    startPolling()
+  }
+
+  onUnmounted(() => {
+    stopPolling()
+    abortController.abort()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  })
+
+  return { refresh }
+}
