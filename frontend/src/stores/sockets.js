@@ -35,22 +35,57 @@ export const useSocketsStore = defineStore('sockets', () => {
       const aVal = a[key]
       const bVal = b[key]
 
-      // Numeric fields
+      let cmp
       if (['local_port', 'remote_port'].includes(key)) {
-        return (aVal - bVal) * dir
+        cmp = (aVal - bVal)
+      } else {
+        cmp = String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base' })
       }
 
-      // String fields (case-insensitive)
-      return String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base' }) * dir
+      // Secondary sort by local_port to keep groups contiguous
+      if (cmp === 0 && key !== 'local_port') {
+        return a.local_port - b.local_port
+      }
+
+      return cmp * dir
     })
   })
 
-  const filteredAndSortedSockets = computed(() =>
-    sortedSockets.value.map((s, i) => ({
-      ...s,
-      _key: `${s.protocol}-${s.local_addr}:${s.local_port}-${s.remote_addr}:${s.remote_port}-${i}`
-    }))
-  )
+  const filteredAndSortedSockets = computed(() => {
+    const result = []
+    let currentGroup = null
+    let groupIndex = 0
+
+    // Build port counts in a single pass
+    const portCounts = new Map()
+    for (const s of sortedSockets.value) {
+      portCounts.set(s.local_port, (portCounts.get(s.local_port) || 0) + 1)
+    }
+
+    let socketIdx = 0
+    for (const s of sortedSockets.value) {
+      if (currentGroup !== s.local_port) {
+        // Close previous group if exists
+        if (currentGroup !== null) {
+          groupIndex++
+        }
+        // Start new group - use pre-computed port count
+        result.push({
+          _type: 'group',
+          port: s.local_port,
+          count: portCounts.get(s.local_port),
+          _key: `group-${s.local_port}-${groupIndex}`
+        })
+        currentGroup = s.local_port
+      }
+      result.push({
+        ...s,
+        _type: 'socket',
+        _key: `${s.protocol}-${s.local_addr}:${s.local_port}-${s.remote_addr}:${s.remote_port}-${socketIdx++}`
+      })
+    }
+    return result
+  })
 
   // Actions
   function setSockets(data, timestamp) {

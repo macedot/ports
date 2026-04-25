@@ -26,13 +26,17 @@
 
     <div class="table-body">
       <RecycleScroller
-        v-if="filteredAndSortedSockets.length > 0"
+        v-if="socketItemCount > 0"
         :items="filteredAndSortedSockets"
         :item-size="32"
         key-field="_key"
         v-slot="{ item }"
       >
-        <SocketRow :item="item" />
+        <div v-if="item._type === 'group'" class="group-header">
+          <span class="port-label">Port {{ item.port }}</span>
+          <span class="count-badge">{{ item.count }} connection{{ item.count !== 1 ? 's' : '' }}</span>
+        </div>
+        <SocketRow v-else :item="item" :grouped="true" />
       </RecycleScroller>
       <div v-else class="empty-state">
         No sockets found
@@ -40,7 +44,7 @@
     </div>
 
     <div class="table-footer">
-      <span class="socket-count">{{ filteredAndSortedSockets.length }} socket{{ filteredAndSortedSockets.length !== 1 ? 's' : '' }}</span>
+      <span class="socket-count">{{ socketItemCount }} socket{{ socketItemCount !== 1 ? 's' : '' }}</span>
     </div>
   </div>
 </template>
@@ -55,6 +59,15 @@ import { useSocketsStore } from '../stores/sockets'
 
 const store = useSocketsStore()
 const { filteredAndSortedSockets, sortKey, sortDir } = storeToRefs(store)
+
+const socketItemCount = computed(() => {
+  const items = filteredAndSortedSockets.value
+  let count = 0
+  for (const item of items) {
+    if (item._type === 'socket') count++
+  }
+  return count
+})
 
 const getSortIndicator = (key) => {
   if (sortKey.value !== key) return ''
@@ -138,5 +151,33 @@ const getSortIndicator = (key) => {
 
 .socket-count {
   color: #8080a0;
+}
+
+.group-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 12px;
+  background: #1e1e36;
+  border-left: 3px solid #4a9eff;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #c0c0e0;
+}
+
+.group-header .port-label {
+  font-weight: 700;
+  color: #e0e0ff;
+  font-size: 13px;
+}
+
+.group-header .count-badge {
+  font-size: 10px;
+  color: #8888aa;
+  background: #2d2d44;
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 </style>

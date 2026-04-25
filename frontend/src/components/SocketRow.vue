@@ -3,7 +3,7 @@
     <span class="col-protocol">
       <span class="badge" :class="protocolClass">{{ item.protocol }}</span>
     </span>
-    <span class="col-local">{{ item.local_addr }}:{{ item.local_port }}</span>
+    <span class="col-local">{{ grouped ? item.local_addr : item.local_addr + ':' + item.local_port }}</span>
     <span class="col-foreign">{{ item.remote_addr }}:{{ item.remote_port }}</span>
     <span class="col-state">
       <span class="badge" :class="stateClass">{{ item.state }}</span>
@@ -19,6 +19,10 @@ const props = defineProps({
   item: {
     type: Object,
     required: true
+  },
+  grouped: {
+    type: Boolean,
+    default: false
   }
 })
 
