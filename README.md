@@ -1,21 +1,17 @@
+<h1 align="center">Listen Ports</h1>
+
+<p align="center"><strong>Real-time network socket viewer for Linux</strong></p>
+
 <p align="center">
-  <h1 align="center">Listen Ports</h1>
-  <p align="center">
-    <strong>Real-time network socket viewer for Linux</strong>
-  </p>
-  <p align="center">
-    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0" />
-    <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go" alt="Go" />
-    <img src="https://img.shields.io/badge/Vue.js-3-4FC08D?logo=vue.js" alt="Vue.js" />
-    <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker" alt="Docker" />
-  </p>
+  <img src="https://img.shields.io/github/license/macedot/ports?color=blue" alt="License" />
+  <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/Vue.js-3-4FC08D?logo=vue.js&logoColor=white" alt="Vue.js" />
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker" />
 </p>
 
 ---
 
 **Listen Ports** reads `/proc/net/tcp`, `/proc/net/tcp6`, `/proc/net/udp`, `/proc/net/udp6` directly — no dependency on `ss`, `netstat`, or `lsof` — and presents every TCP/UDP socket (IPv4 + IPv6) in a dark-themed, auto-refreshing web dashboard with process name resolution.
-
-![Listen Ports dashboard showing socket table](docs/screenshot.png)
 
 ## Features
 
