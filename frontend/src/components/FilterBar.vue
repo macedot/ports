@@ -28,18 +28,22 @@
       </div>
     </div>
 
-    <div class="filter-group">
-      <span class="filter-label">Container</span>
+    <div class="filter-group" :class="{ disabled: !hasContainerData }">
+      <span class="filter-label">Docker</span>
       <div class="button-group">
         <button
           v-for="opt in containerOptions"
           :key="opt.value"
           :class="['filter-btn', { active: containerFilter === opt.value }]"
-          @click="store.setContainerFilter(opt.value)"
+          @click="hasContainerData && store.setContainerFilter(opt.value)"
+          :disabled="!hasContainerData"
         >
           {{ opt.label }}
         </button>
       </div>
+      <span v-if="!hasContainerData" class="filter-hint" title="Mount docker.sock and set DOCKER_HOST in docker-compose.yml">
+        🐳 off
+      </span>
     </div>
   </div>
 </template>
@@ -49,7 +53,7 @@ import { useSocketsStore } from '../stores/sockets'
 import { storeToRefs } from 'pinia'
 
 const store = useSocketsStore()
-const { protoFilter, ipVerFilter, containerFilter } = storeToRefs(store)
+const { protoFilter, ipVerFilter, containerFilter, hasContainerData } = storeToRefs(store)
 
 const protoOptions = [
   { label: 'TCP', value: 'tcp' },
@@ -65,8 +69,8 @@ const ipVerOptions = [
 
 const containerOptions = [
   { label: 'All', value: 'all' },
-  { label: 'With Container', value: 'with' },
-  { label: 'No Container', value: 'without' }
+  { label: 'Docker', value: 'with' },
+  { label: 'No Docker', value: 'without' }
 ]
 </script>
 
@@ -127,5 +131,20 @@ const containerOptions = [
   background-color: #3d3d6b;
   color: #e0e0ff;
   font-weight: 600;
+}
+
+.filter-group.disabled {
+  opacity: 0.5;
+}
+
+.filter-group.disabled .filter-btn {
+  cursor: not-allowed;
+}
+
+.filter-hint {
+  font-size: 10px;
+  color: #7c3aed;
+  margin-left: 8px;
+  cursor: help;
 }
 </style>

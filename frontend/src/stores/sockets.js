@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { shallowRef, ref, computed, triggerRef } from 'vue'
+import { shallowRef, ref, computed, triggerRef, watch } from 'vue'
 
 export const useSocketsStore = defineStore('sockets', () => {
   // State
@@ -127,6 +127,17 @@ export const useSocketsStore = defineStore('sockets', () => {
     return ports.size
   })
 
+  const hasContainerData = computed(() => {
+    return sockets.value.some(s => s.container !== undefined && s.container !== null && s.container !== '')
+  })
+
+  // Reset container filter when Docker data disappears (prevents stale filter trapping user)
+  watch(hasContainerData, (has) => {
+    if (!has && containerFilter.value !== 'all') {
+      containerFilter.value = 'all'
+    }
+  })
+
   // Actions
   function setSockets(data, timestamp) {
     sockets.value = data
@@ -229,6 +240,7 @@ export const useSocketsStore = defineStore('sockets', () => {
     sortedSockets,
     filteredAndSortedSockets,
     groupCount,
+    hasContainerData,
     // Actions
     setSockets,
     setProtoFilter,

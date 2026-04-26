@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"listen-ports/internal/docker"
 	"listen-ports/internal/mapper"
 	"listen-ports/internal/parser"
 )
@@ -533,5 +534,98 @@ func TestAuthHandler_MissingAuthHeader_401(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected status 401, got %d", w.Code)
+	}
+}
+
+func TestFilterAndEnrichSockets_HostNetworkContainerByPID(t *testing.T) {
+	data := []parser.SocketEntry{
+		{Protocol: "TCP", LocalAddr: "0.0.0.0", LocalPort: 8080, State: "LISTEN", Inode: 999},
+	}
+	processMap := map[uint64]mapper.ProcessInfo{
+		999: {PID: 1234, Name: "nginx"},
+	}
+	containers := []docker.ContainerInfo{
+		{ID: "abc123", Name: "nginx", Image: "nginx:alpine", NetworkMode: "host", PID: 1234},
+	}
+
+	result := filterAndEnrichSockets(data, processMap, containers, "both", "both")
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 socket, got %d", len(result))
+	}
+	if result[0].Container == nil || *result[0].Container != "nginx" {
+		t.Errorf("expected container 'nginx', got %v", result[0].Container)
+	}
+	if result[0].CImage == nil || *result[0].CImage != "nginx:alpine" {
+		t.Errorf("expected c_image 'nginx:alpine', got %v", result[0].CImage)
+	}
+	if result[0].CNetwork == nil || *result[0].CNetwork != "host" {
+		t.Errorf("expected c_network 'host', got %v", result[0].CNetwork)
+	}
+}
+
+func TestFilterAndEnrichSockets_BridgeContainerByPort(t *testing.T) {
+	data := []parser.SocketEntry{
+		{Protocol: "TCP", LocalAddr: "0.0.0.0", LocalPort: 8080, State: "LISTEN", Inode: 1},
+		{Protocol: "TCP", LocalAddr: "10.0.0.1", LocalPort: 8080, State: "ESTABLISHED", RemoteAddr: "192.168.1.1", RemotePort: 54321, Inode: 2},
+	}
+	processMap := map[uint64]mapper.ProcessInfo{}
+	containers := []docker.ContainerInfo{
+		{ID: "def456", Name: "webapp", Image: "webapp:latest", NetworkMode: "bridge", Ports: []docker.PortMapping{
+			{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"},
+		}},
+	}
+
+	result := filterAndEnrichSockets(data, processMap, containers, "both", "both")
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 sockets, got %d", len(result))
+	}
+	for i, s := range result {
+		if s.Container == nil || *s.Container != "webapp" {
+			t.Errorf("socket %d: expected container 'webapp', got %v", i, s.Container)
+		}
+	}
+}
+
+func TestFilterAndEnrichSockets_NoContainerMatch(t *testing.T) {
+	data := []parser.SocketEntry{
+		{Protocol: "TCP", LocalAddr: "0.0.0.0", LocalPort: 9999, State: "LISTEN", Inode: 1},
+	}
+	processMap := map[uint64]mapper.ProcessInfo{}
+	containers := []docker.ContainerInfo{
+		{ID: "xyz789", Name: "other", Image: "other:latest", NetworkMode: "bridge", Ports: []docker.PortMapping{
+			{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"},
+		}},
+	}
+
+	result := filterAndEnrichSockets(data, processMap, containers, "both", "both")
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 socket, got %d", len(result))
+	}
+	if result[0].Container != nil {
+		t.Errorf("expected nil container, got %v", *result[0].Container)
+	}
+}
+
+func TestFilterAndEnrichSockets_BridgeContainerIPv6(t *testing.T) {
+	data := []parser.SocketEntry{
+		{Protocol: "TCP6", LocalAddr: "::", LocalPort: 8080, State: "LISTEN", Inode: 1},
+	}
+	processMap := map[uint64]mapper.ProcessInfo{}
+	containers := []docker.ContainerInfo{
+		{ID: "ghi789", Name: "webapp", Image: "webapp:latest", NetworkMode: "bridge", Ports: []docker.PortMapping{
+			{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"},
+		}},
+	}
+
+	result := filterAndEnrichSockets(data, processMap, containers, "both", "both")
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 socket, got %d", len(result))
+	}
+	if result[0].Container == nil || *result[0].Container != "webapp" {
+		t.Errorf("expected container 'webapp' for IPv6, got %v", result[0].Container)
 	}
 }
