@@ -206,25 +206,25 @@ cd frontend && npm test
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────┐
-│  Single Container (ports)                   │
-│  ┌─────────────────────────────────────────┐ │
-│  │  Go Binary :8080                        │ │
-│  │  ┌───────────────────────────────────┐  │ │
-│  │  │  Embedded Vue.js SPA (go:embed)   │  │ │
-│  │  │  Polls /api/sockets every 5s      │  │ │
-│  │  └───────────────────────────────────┘  │ │
-│  │  ┌───────────────────────────────────┐  │ │
-│  │  │  Go Backend                       │  │ │
-│  │  │  /proc/net/{tcp,tcp6,udp,udp6}   │  │ │
-│  │  │  /proc/[pid]/fd → process map    │  │ │
-│  │  │  singleflight cache (TTL)         │  │ │
-│  │  │  Optional ADMIN_TOKEN auth        │  │ │
-│  │  └───────────────────────────────────┘  │ │
-│  └─────────────────────────────────────────┘ │
-│  Volume: /proc → /host-proc (read-only)      │
-│  Volume: /var/run/docker.sock (optional, :ro) │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  Single Container (ports)                             │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │  Go Binary :8080                                │ │
+│  │  ┌────────────────────────────────────────────┐  │ │
+│  │  │  Embedded Vue.js SPA (go:embed)            │  │ │
+│  │  │  Polls /api/sockets every 5s               │  │ │
+│  │  └────────────────────────────────────────────┘  │ │
+│  │  ┌────────────────────────────────────────────┐  │ │
+│  │  │  Go Backend                                │  │ │
+│  │  │  /proc/net/{tcp,tcp6,udp,udp6}            │  │ │
+│  │  │  /proc/[pid]/fd → process map             │  │ │
+│  │  │  singleflight cache (TTL)                  │  │ │
+│  │  │  Optional ADMIN_TOKEN auth                 │  │ │
+│  │  └────────────────────────────────────────────┘  │ │
+│  └──────────────────────────────────────────────────┘ │
+│  Volume: /proc → /host-proc (read-only)              │
+│  Volume: /var/run/docker.sock (optional, :ro)        │
+└────────────────────────────────────────────────────────┘
 ```
 
 **How it works:**
