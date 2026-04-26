@@ -33,20 +33,27 @@ func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 			continue
 		}
 
-		procInfo, err := buildProcessInfo(procPath, pid)
-		if err != nil {
-			log.Printf("mapper: skipping PID %d (buildProcessInfo failed): %v", pid, err)
-			continue
-		}
-
+		// Read socket inodes FIRST — critical data, never skip on name failure
 		inodes, err := readSocketInodes(procPath, pid)
 		if err != nil {
 			log.Printf("mapper: skipping PID %d (readSocketInodes failed): %v", pid, err)
 			continue
 		}
+		if len(inodes) == 0 {
+			continue
+		}
+
+		// Try to get process name — non-fatal if it fails
+		name := ""
+		procInfo, err := buildProcessInfo(procPath, pid)
+		if err != nil {
+			log.Printf("mapper: PID %d name unreadable, using empty name: %v", pid, err)
+		} else {
+			name = procInfo.Name
+		}
 
 		for _, inode := range inodes {
-			result[inode] = *procInfo
+			result[inode] = ProcessInfo{PID: pid, Name: name}
 		}
 	}
 
@@ -62,33 +69,42 @@ func buildProcessInfo(procPath string, pid int) (*ProcessInfo, error) {
 }
 
 func readProcessName(procPath string, pid int) (string, error) {
+	// Try /proc/[pid]/status
 	statusPath := filepath.Join(procPath, strconv.Itoa(pid), "status")
 	data, err := os.ReadFile(statusPath)
-	if err != nil {
-		commPath := filepath.Join(procPath, strconv.Itoa(pid), "comm")
-		data, err = os.ReadFile(commPath)
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(string(data)), nil
-	}
-
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Name:") {
-			parts := strings.SplitN(line, "\t", 2)
-			if len(parts) == 2 {
-				return parts[1], nil
+	if err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "Name:") {
+				parts := strings.SplitN(line, "\t", 2)
+				if len(parts) == 2 {
+					return parts[1], nil
+				}
 			}
 		}
 	}
 
+	// Try /proc/[pid]/comm
 	commPath := filepath.Join(procPath, strconv.Itoa(pid), "comm")
 	data, err = os.ReadFile(commPath)
-	if err != nil {
-		return "", err
+	if err == nil {
+		return strings.TrimSpace(string(data)), nil
 	}
-	return strings.TrimSpace(string(data)), nil
+
+	// Try /proc/[pid]/cmdline (first arg, null-separated)
+	cmdlinePath := filepath.Join(procPath, strconv.Itoa(pid), "cmdline")
+	data, err = os.ReadFile(cmdlinePath)
+	if err == nil && len(data) > 0 {
+		// cmdline is null-separated; take first element
+		args := strings.Split(string(data), "\x00")
+		if len(args) > 0 && args[0] != "" {
+			// Extract basename from full path (e.g. "/usr/bin/nginx" → "nginx")
+			base := filepath.Base(args[0])
+			return base, nil
+		}
+	}
+
+	return "", fmt.Errorf("no readable name source for pid %d", pid)
 }
 
 func readSocketInodes(procPath string, pid int) ([]uint64, error) {

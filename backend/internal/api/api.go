@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -244,7 +245,11 @@ func filterAndEnrichSockets(data []parser.SocketEntry, processMap map[uint64]map
 		processName := ""
 		var containerName, cImage, cNetwork *string
 		if procInfo, ok := processMap[entry.Inode]; ok {
-			processName = procInfo.Name
+			if procInfo.Name != "" {
+				processName = procInfo.Name
+			} else if procInfo.PID > 0 {
+				processName = fmt.Sprintf("pid:%d", procInfo.PID)
+			}
 
 			// Match container by PID (host-network)
 			if cInfo, ok := containerPIDMap[procInfo.PID]; ok {

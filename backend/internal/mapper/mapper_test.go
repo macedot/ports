@@ -130,3 +130,72 @@ func TestMockProcStructure(t *testing.T) {
 		t.Errorf("mock status content mismatch")
 	}
 }
+
+func TestBuildProcessMap_RecordsPIDWhenNameUnreadable(t *testing.T) {
+	// Create a mock /proc structure where:
+	// - PID 99999 has no readable status/comm but has fd/ directory
+	// - fd/ contains a socket inode
+	tmpDir := t.TempDir()
+	pid := 99999
+
+	fdPath := filepath.Join(tmpDir, strconv.Itoa(pid), "fd")
+	if err := os.MkdirAll(fdPath, 0755); err != nil {
+		t.Skipf("cannot create fd dir: %v", err)
+	}
+
+	// Create a mock socket fd entry
+	socketLink := filepath.Join(fdPath, "0")
+	if err := os.Symlink("socket:[12345]", socketLink); err != nil {
+		t.Skipf("cannot create socket symlink: %v", err)
+	}
+
+	// Build process map - should still record inode 12345 with PID=99999 even though
+	// status/comm are missing
+	result, err := BuildProcessMap(tmpDir)
+	if err != nil {
+		t.Fatalf("BuildProcessMap failed: %v", err)
+	}
+
+	// Verify inode is recorded
+	info, ok := result[12345]
+	if !ok {
+		t.Fatal("expected inode 12345 to be recorded")
+	}
+
+	// Verify PID is set even though name is empty
+	if info.PID != pid {
+		t.Errorf("expected PID %d, got %d", pid, info.PID)
+	}
+
+	// Name should be empty since status/comm are unreadable
+	if info.Name != "" {
+		t.Errorf("expected empty name, got %q", info.Name)
+	}
+}
+
+func TestReadProcessName_CmdlineFallback(t *testing.T) {
+	// Create a mock /proc structure with cmdline but no status/comm
+	tmpDir := t.TempDir()
+	pid := 99998
+
+	cmdlinePath := filepath.Join(tmpDir, strconv.Itoa(pid), "cmdline")
+	if err := os.MkdirAll(filepath.Dir(cmdlinePath), 0755); err != nil {
+		t.Skipf("cannot create cmdline dir: %v", err)
+	}
+
+	// Write a cmdline with full path - should extract basename
+	cmdline := "/usr/bin/test-process\x00arg1\x00arg2\x00"
+	if err := os.WriteFile(cmdlinePath, []byte(cmdline), 0644); err != nil {
+		t.Skipf("cannot write cmdline: %v", err)
+	}
+
+	name, err := readProcessName(tmpDir, pid)
+	if err != nil {
+		t.Fatalf("readProcessName failed: %v", err)
+	}
+
+	// Should extract basename
+	if name != "test-process" {
+		t.Errorf("expected basename 'test-process', got %q", name)
+	}
+}
