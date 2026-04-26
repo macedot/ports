@@ -161,21 +161,20 @@ Listen Ports can optionally detect Docker containers associated with network soc
    # → 999 (or 1001, etc.)
    ```
 
-2. Uncomment the Docker socket lines in `docker-compose.yml` **and** add `group_add`:
+2. Uncomment the Docker socket lines in `docker-compose.yml` **and** set `user`:
 
    ```yaml
    volumes:
      - /proc:/host-proc:ro
      - /var/run/docker.sock:/var/run/docker.sock:ro   # ← uncomment
-   group_add:
-     - "999"  # ← replace with your host's docker group GID
+   user: "65534:999"                                   # ← replace 999 with your host docker GID
    environment:
      DOCKER_HOST: "/var/run/docker.sock"               # ← uncomment
    ```
 
 3. Restart: `docker compose up -d`
 
-> **Why `group_add` is required:** The container runs as non-root (UID 65534). The Docker socket on the host is owned by `root:docker` with mode `660`. Adding the container process to the docker group (via `group_add`) grants read access to the socket.
+> **Why `user` is required:** The container runs as non-root (UID 65534). The Docker socket on the host is owned by `root:docker` with mode `660`. Setting `user: "65534:<gid>"` makes `docker` the primary group of the process so the socket is readable. Without this, container detection silently fails.
 
 ### How it works
 

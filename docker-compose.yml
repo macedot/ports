@@ -10,19 +10,23 @@ services:
     volumes:
       - /proc:/host-proc:ro
       # Optional: Docker container monitoring
-      # Uncomment BOTH the volume AND group_add to enable container detection.
-      # The container runs as UID 65534 (nobody); group_add joins the docker
-      # group so the socket is accessible. Get your host GID with:
-      #   getent group docker | cut -d: -f3
+      #
+      # 1. Find your host docker GID:
+      #    getent group docker | cut -d: -f3
+      #
+      # 2. Uncomment the 3 lines below and replace 999 with your GID.
+      #    The container runs as UID 65534 (nobody). Setting user:
+      #    "65534:<gid>" makes docker the primary group so the socket
+      #    is readable. Without this, container detection fails silently.
+      #
       # - /var/run/docker.sock:/var/run/docker.sock:ro
-    # group_add:
-      # - "999"  # ← replace with your host's docker group GID
+    # user: "65534:999"
     environment:
       PORT: "8080"
       PROC_PATH: "/host-proc"
       CACHE_TTL: "10s"
-      # DOCKER_HOST: "/var/run/docker.sock"  # Required when docker.sock volume is mounted
-      # ADMIN_TOKEN: "change-me"  # Set a strong token to enable authentication
+      # DOCKER_HOST: "/var/run/docker.sock"
+      # ADMIN_TOKEN: "change-me"
     read_only: true
     tmpfs:
       - /tmp
