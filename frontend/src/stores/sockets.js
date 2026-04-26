@@ -6,6 +6,7 @@ export const useSocketsStore = defineStore('sockets', () => {
   const sockets = shallowRef([])
   const protoFilter = ref('both')
   const ipVerFilter = ref('both')
+  const containerFilter = ref('all')
   const sortKey = ref('local_port')
   const sortDir = ref('asc')
   const updatedAt = ref(null)
@@ -27,10 +28,14 @@ export const useSocketsStore = defineStore('sockets', () => {
       if (ipVerFilter.value === '4' && sock.protocol.endsWith('6')) return false
       if (ipVerFilter.value === '6' && !sock.protocol.endsWith('6')) return false
 
+      // Container filter
+      if (containerFilter.value === 'with' && !sock.container) return false
+      if (containerFilter.value === 'without' && sock.container) return false
+
       // Regex search filter (matches against all text fields)
       if (searchRegex.value) {
         const re = searchRegex.value
-        const haystack = `${sock.protocol} ${sock.local_addr} ${sock.local_port} ${sock.remote_addr} ${sock.remote_port} ${sock.state} ${sock.process}`
+        const haystack = `${sock.protocol} ${sock.local_addr} ${sock.local_port} ${sock.remote_addr} ${sock.remote_port} ${sock.state} ${sock.process} ${sock.container || ''} ${sock.c_image || ''} ${sock.c_network || ''}`
         if (!re.test(haystack)) return false
       }
 
@@ -67,10 +72,20 @@ export const useSocketsStore = defineStore('sockets', () => {
     let currentGroup = null
     let groupIndex = 0
 
-    // Build port counts in a single pass
+    // Build port counts and container map in a single pass
     const portCounts = new Map()
+    const portContainerMap = new Map()
     for (const s of sortedSockets.value) {
       portCounts.set(s.local_port, (portCounts.get(s.local_port) || 0) + 1)
+      if (!portContainerMap.has(s.local_port)) {
+        portContainerMap.set(s.local_port, { container: s.container, c_image: s.c_image, count: 1, same: true })
+      } else {
+        const existing = portContainerMap.get(s.local_port)
+        if (existing.container !== s.container) {
+          existing.same = false
+        }
+        existing.count++
+      }
     }
 
     for (let i = 0; i < sortedSockets.value.length; i++) {
@@ -80,11 +95,14 @@ export const useSocketsStore = defineStore('sockets', () => {
         if (currentGroup !== null) {
           groupIndex++
         }
-        // Start new group - use pre-computed port count
+        // Start new group - use pre-computed port count and container info
+        const portInfo = portContainerMap.get(s.local_port)
         result.push({
           _type: 'group',
           port: s.local_port,
           count: portCounts.get(s.local_port),
+          container: portInfo.same ? portInfo.container : null,
+          c_image: portInfo.same ? portInfo.c_image : null,
           _key: `group-${s.local_port}-${groupIndex}`
         })
         currentGroup = s.local_port
@@ -128,6 +146,12 @@ export const useSocketsStore = defineStore('sockets', () => {
     }
   }
 
+  function setContainerFilter(value) {
+    if (['all', 'with', 'without'].includes(value)) {
+      containerFilter.value = value
+    }
+  }
+
   function setSearchQuery(value) {
     searchQuery.value = value
     if (!value || value.trim() === '') {
@@ -145,7 +169,7 @@ export const useSocketsStore = defineStore('sockets', () => {
   }
 
   function toggleSort(key) {
-    const sortableKeys = ['protocol', 'local_addr', 'local_port', 'remote_addr', 'remote_port', 'state', 'process']
+    const sortableKeys = ['protocol', 'local_addr', 'local_port', 'remote_addr', 'remote_port', 'state', 'process', 'container']
     if (!sortableKeys.includes(key)) return
 
     if (sortKey.value === key) {
@@ -190,6 +214,7 @@ export const useSocketsStore = defineStore('sockets', () => {
     sockets,
     protoFilter,
     ipVerFilter,
+    containerFilter,
     sortKey,
     sortDir,
     updatedAt,
@@ -208,6 +233,7 @@ export const useSocketsStore = defineStore('sockets', () => {
     setSockets,
     setProtoFilter,
     setIPVerFilter,
+    setContainerFilter,
     setSearchQuery,
     toggleSort,
     setError,

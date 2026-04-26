@@ -119,7 +119,7 @@ func TestFilterAndEnrichSockets_TCPFilter(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "tcp", "both")
+	result := filterAndEnrichSockets(data, processMap, nil, "tcp", "both")
 
 	if len(result) != 2 {
 		t.Errorf("expected 2 sockets, got %d", len(result))
@@ -140,7 +140,7 @@ func TestFilterAndEnrichSockets_UDPFilter(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "udp", "both")
+	result := filterAndEnrichSockets(data, processMap, nil, "udp", "both")
 
 	if len(result) != 2 {
 		t.Errorf("expected 2 sockets, got %d", len(result))
@@ -161,7 +161,7 @@ func TestFilterAndEnrichSockets_IPVer4Filter(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "both", "4")
+	result := filterAndEnrichSockets(data, processMap, nil, "both", "4")
 
 	if len(result) != 2 {
 		t.Errorf("expected 2 sockets for ipver=4, got %d", len(result))
@@ -182,7 +182,7 @@ func TestFilterAndEnrichSockets_IPVer6Filter(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "both", "6")
+	result := filterAndEnrichSockets(data, processMap, nil, "both", "6")
 
 	if len(result) != 2 {
 		t.Errorf("expected 2 sockets for ipver=6, got %d", len(result))
@@ -203,7 +203,7 @@ func TestFilterAndEnrichSockets_CombinedFilters(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "tcp", "6")
+	result := filterAndEnrichSockets(data, processMap, nil, "tcp", "6")
 
 	if len(result) != 1 {
 		t.Errorf("expected 1 socket for proto=tcp&ipver=6, got %d", len(result))
@@ -221,7 +221,7 @@ func TestFilterAndEnrichSockets_WithProcessInfo(t *testing.T) {
 		999: {PID: 100, Name: "sshd"},
 	}
 
-	result := filterAndEnrichSockets(data, processMap, "both", "4")
+	result := filterAndEnrichSockets(data, processMap, nil, "both", "4")
 
 	if len(result) != 1 {
 		t.Fatalf("expected 1 socket, got %d", len(result))
@@ -237,7 +237,7 @@ func TestFilterAndEnrichSockets_NoProcessMatch(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "both", "4")
+	result := filterAndEnrichSockets(data, processMap, nil, "both", "4")
 
 	if len(result) != 1 {
 		t.Fatalf("expected 1 socket, got %d", len(result))
@@ -251,7 +251,7 @@ func TestFilterAndEnrichSockets_EmptyData(t *testing.T) {
 	data := []parser.SocketEntry{}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "both", "both")
+	result := filterAndEnrichSockets(data, processMap, nil, "both", "both")
 
 	if len(result) != 0 {
 		t.Errorf("expected 0 sockets, got %d", len(result))
@@ -265,7 +265,7 @@ func TestFilterAndEnrichSockets_EmptyProcessMap(t *testing.T) {
 	}
 	processMap := map[uint64]mapper.ProcessInfo{}
 
-	result := filterAndEnrichSockets(data, processMap, "both", "both")
+	result := filterAndEnrichSockets(data, processMap, nil, "both", "both")
 
 	if len(result) != 2 {
 		t.Errorf("expected 2 sockets, got %d", len(result))

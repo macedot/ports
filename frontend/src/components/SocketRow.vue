@@ -9,6 +9,12 @@
       <span class="badge" :class="stateClass">{{ item.state }}</span>
     </span>
     <span class="col-process">{{ displayProcess }}</span>
+    <span class="col-container">
+      <span v-if="item.container" class="container-badge" :title="item.c_image">
+        {{ displayContainer }}
+      </span>
+      <span v-else class="container-empty">—</span>
+    </span>
   </div>
 </template>
 
@@ -46,12 +52,16 @@ const stateClass = computed(() => {
 const displayProcess = computed(() => {
   return props.item.process?.trim() || '?'
 })
+
+const displayContainer = computed(() => {
+  return props.item.container?.trim() || '—'
+})
 </script>
 
 <style scoped>
 .socket-row {
   display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 140px;
+  grid-template-columns: 60px 1fr 1fr 100px 140px 160px;
   align-items: center;
   height: 32px;
   padding: 0 12px;
@@ -89,6 +99,32 @@ const displayProcess = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.col-container {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #c0c0c0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.container-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: #7c3aed;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.container-empty {
+  color: #4a4a6a;
 }
 
 .badge {

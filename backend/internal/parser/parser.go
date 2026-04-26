@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -280,18 +281,18 @@ func parseFile(path string, parseEntry func([]string) (SocketEntry, error)) ([]S
 	return entries, nil
 }
 
-func ParseTCP() ([]SocketEntry, error) {
-	return parseFile("/proc/net/tcp", parseTCPEntry)
+func ParseTCP(procPath string) ([]SocketEntry, error) {
+	return parseFile(filepath.Join(procPath, "1", "net", "tcp"), parseTCPEntry)
 }
 
-func ParseTCP6() ([]SocketEntry, error) {
-	return parseFile("/proc/net/tcp6", parseTCP6Entry)
+func ParseTCP6(procPath string) ([]SocketEntry, error) {
+	return parseFile(filepath.Join(procPath, "1", "net", "tcp6"), parseTCP6Entry)
 }
 
-func ParseUDP() ([]SocketEntry, error) {
-	return parseFile("/proc/net/udp", parseUDPEntry)
+func ParseUDP(procPath string) ([]SocketEntry, error) {
+	return parseFile(filepath.Join(procPath, "1", "net", "udp"), parseUDPEntry)
 }
 
-func ParseUDP6() ([]SocketEntry, error) {
-	return parseFile("/proc/net/udp6", parseUDP6Entry)
+func ParseUDP6(procPath string) ([]SocketEntry, error) {
+	return parseFile(filepath.Join(procPath, "1", "net", "udp6"), parseUDP6Entry)
 }

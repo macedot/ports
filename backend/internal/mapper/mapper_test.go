@@ -19,7 +19,7 @@ func TestProcessInfoStruct(t *testing.T) {
 }
 
 func TestBuildProcessMap(t *testing.T) {
-	result, err := BuildProcessMap()
+	result, err := BuildProcessMap("/proc")
 	if err != nil {
 		t.Fatalf("BuildProcessMap failed: %v", err)
 	}
@@ -27,14 +27,14 @@ func TestBuildProcessMap(t *testing.T) {
 }
 
 func TestReadProcessNameNonExistentPID(t *testing.T) {
-	_, err := readProcessName(999999)
+	_, err := readProcessName("/proc", 999999)
 	if err == nil {
 		t.Log("readProcessName returned no error for non-existent PID (ok if /proc mounted)")
 	}
 }
 
 func TestReadSocketInodesNonExistentPID(t *testing.T) {
-	_, err := readSocketInodes(999999)
+	_, err := readSocketInodes("/proc", 999999)
 	if err == nil {
 		t.Log("readSocketInodes returned no error (ok if /proc mounted)")
 	}
@@ -69,7 +69,7 @@ func TestInodeExtraction(t *testing.T) {
 }
 
 func TestBuildProcessInfoErrors(t *testing.T) {
-	_, err := buildProcessInfo(999999)
+	_, err := buildProcessInfo("/proc", 999999)
 	if err != nil {
 		t.Logf("buildProcessInfo correctly returned error for invalid PID: %v", err)
 	}

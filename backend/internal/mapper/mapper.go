@@ -13,12 +13,12 @@ type ProcessInfo struct {
 	Name string
 }
 
-func BuildProcessMap() (map[uint64]ProcessInfo, error) {
+func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 	result := make(map[uint64]ProcessInfo)
 
-	entries, err := os.ReadDir("/proc")
+	entries, err := os.ReadDir(procPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read /proc: %w", err)
+		return nil, fmt.Errorf("failed to read %s: %w", procPath, err)
 	}
 
 	for _, entry := range entries {
@@ -32,12 +32,12 @@ func BuildProcessMap() (map[uint64]ProcessInfo, error) {
 			continue
 		}
 
-		procInfo, err := buildProcessInfo(pid)
+		procInfo, err := buildProcessInfo(procPath, pid)
 		if err != nil {
 			continue
 		}
 
-		inodes, err := readSocketInodes(pid)
+		inodes, err := readSocketInodes(procPath, pid)
 		if err != nil {
 			continue
 		}
@@ -50,19 +50,19 @@ func BuildProcessMap() (map[uint64]ProcessInfo, error) {
 	return result, nil
 }
 
-func buildProcessInfo(pid int) (*ProcessInfo, error) {
-	name, err := readProcessName(pid)
+func buildProcessInfo(procPath string, pid int) (*ProcessInfo, error) {
+	name, err := readProcessName(procPath, pid)
 	if err != nil {
 		return nil, err
 	}
 	return &ProcessInfo{PID: pid, Name: name}, nil
 }
 
-func readProcessName(pid int) (string, error) {
-	statusPath := filepath.Join("/proc", strconv.Itoa(pid), "status")
+func readProcessName(procPath string, pid int) (string, error) {
+	statusPath := filepath.Join(procPath, strconv.Itoa(pid), "status")
 	data, err := os.ReadFile(statusPath)
 	if err != nil {
-		commPath := filepath.Join("/proc", strconv.Itoa(pid), "comm")
+		commPath := filepath.Join(procPath, strconv.Itoa(pid), "comm")
 		data, err = os.ReadFile(commPath)
 		if err != nil {
 			return "", err
@@ -80,7 +80,7 @@ func readProcessName(pid int) (string, error) {
 		}
 	}
 
-	commPath := filepath.Join("/proc", strconv.Itoa(pid), "comm")
+	commPath := filepath.Join(procPath, strconv.Itoa(pid), "comm")
 	data, err = os.ReadFile(commPath)
 	if err != nil {
 		return "", err
@@ -88,8 +88,8 @@ func readProcessName(pid int) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func readSocketInodes(pid int) ([]uint64, error) {
-	fdPath := filepath.Join("/proc", strconv.Itoa(pid), "fd")
+func readSocketInodes(procPath string, pid int) ([]uint64, error) {
+	fdPath := filepath.Join(procPath, strconv.Itoa(pid), "fd")
 	entries, err := os.ReadDir(fdPath)
 	if err != nil {
 		return nil, err

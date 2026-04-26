@@ -27,6 +27,20 @@
         </button>
       </div>
     </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Container</span>
+      <div class="button-group">
+        <button
+          v-for="opt in containerOptions"
+          :key="opt.value"
+          :class="['filter-btn', { active: containerFilter === opt.value }]"
+          @click="store.setContainerFilter(opt.value)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -35,7 +49,7 @@ import { useSocketsStore } from '../stores/sockets'
 import { storeToRefs } from 'pinia'
 
 const store = useSocketsStore()
-const { protoFilter, ipVerFilter } = storeToRefs(store)
+const { protoFilter, ipVerFilter, containerFilter } = storeToRefs(store)
 
 const protoOptions = [
   { label: 'TCP', value: 'tcp' },
@@ -47,6 +61,12 @@ const ipVerOptions = [
   { label: 'IPv4', value: '4' },
   { label: 'IPv6', value: '6' },
   { label: 'Both', value: 'both' }
+]
+
+const containerOptions = [
+  { label: 'All', value: 'all' },
+  { label: 'With Container', value: 'with' },
+  { label: 'No Container', value: 'without' }
 ]
 </script>
 

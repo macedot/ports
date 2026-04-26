@@ -25,4 +25,5 @@ ENV PORT=8080
 EXPOSE 8080
 COPY --from=backend-build /app/server /app/server
 USER 65534:65534
+HEALTHCHECK CMD ["/app/server", "/health"]
 ENTRYPOINT ["/app/server"]

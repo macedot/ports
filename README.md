@@ -24,6 +24,7 @@
 - **Manual refresh** — one-click with spinner indicator
 - **Color-coded badges** — protocol (TCP blue, UDP green) and connection state (LISTEN green, ESTABLISHED blue, TIME_WAIT orange)
 - **Server-side caching** — configurable TTL with singleflight deduplication and stale-serve on failure
+- **Docker container detection** — optionally shows container name, image, and network mode for sockets when Docker socket is mounted (opt-in, requires docker.sock read-only mount)
 
 ## Quick Start
 
@@ -47,7 +48,9 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP listen port |
 | `CACHE_TTL` | `2s` | Response cache TTL (Go duration: `5s`, `1m`, etc.) |
+| `PROC_PATH` | `/proc` | Base path for procfs. Set to `/host-proc` when using the hardened docker-compose. |
 | `ADMIN_TOKEN` | _(unset)_ | Shared secret for authentication. When set, all API requests require `Authorization: Bearer <token>` header. When unset, authentication is disabled. |
+| `DOCKER_HOST` | _(unset)_ | Path to Docker unix socket. Set to `/var/run/docker.sock` when mounting the Docker socket for container monitoring. |
 
 ### Docker Compose
 
@@ -57,7 +60,7 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 | `IMAGE_TAG` | `latest` | Image tag for both services |
 | `ADMIN_TOKEN` | _(unset)_ | Uncomment in `docker-compose.yml` to enable authentication |
 
-> The backend runs with `pid: host` and `network_mode: host` to access the host's `/proc` filesystem. This is required for socket enumeration and process resolution.
+> The hardened docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `pid: host` or `network_mode: host` required. Socket data (addresses, ports, states) is fully functional. Process name resolution requires `SYS_PTRACE` capability (included in docker-compose).
 
 ## API
 
@@ -111,6 +114,64 @@ Returns all socket entries with optional filtering.
 }
 ```
 
+### `GET /api/containers`
+
+Returns all Docker containers with port mappings and metadata. Requires authentication when `ADMIN_TOKEN` is set.
+
+**Response:**
+
+```json
+{
+  "containers": [
+    {
+      "id": "a1b2c3d4e5f6",
+      "name": "nginx",
+      "image": "nginx:alpine",
+      "status": "running",
+      "state": "running",
+      "network_mode": "bridge",
+      "pid": 1234,
+      "ports": [
+        {"host_port": 8080, "container_port": 80, "protocol": "tcp"}
+      ]
+    }
+  ]
+}
+```
+
+## Docker Container Monitoring (Optional)
+
+Listen Ports can optionally detect Docker containers associated with network sockets. When enabled, the socket table shows:
+- **Container name** — the Docker container name (e.g. `nginx`, `postgres`)
+- **Image** — the container image (shown as tooltip)
+- **Network mode** — `host`, `bridge`, or other
+
+### Enabling
+
+1. Mount the Docker socket (read-only) in `docker-compose.yml`:
+   ```yaml
+   volumes:
+     - /proc:/host-proc:ro
+     - /var/run/docker.sock:/var/run/docker.sock:ro
+   environment:
+     - DOCKER_HOST=/var/run/docker.sock
+   ```
+
+2. Restart: `docker compose up -d`
+
+### How it works
+
+- **Host-network containers** — matched by PID (process ID inside the container equals host PID)
+- **Bridge-network containers** — matched by port binding (container's published port matches the socket's local port)
+- Container data is cached for 10 seconds to avoid hammering the Docker API
+
+### Security considerations
+
+- The Docker socket is a **privileged interface** — mounting it grants the container full Docker API access (read-only mount mitigates mutation but not information disclosure)
+- Only enable on trusted hosts
+- The socket is mounted `:ro` (read-only) as a defense-in-depth measure
+- Container detection is **purely informational** — no container management operations are performed
+
 ## Development
 
 ### Prerequisites
@@ -161,7 +222,8 @@ cd frontend && npm test
 │  │  │  Optional ADMIN_TOKEN auth        │  │ │
 │  │  └───────────────────────────────────┘  │ │
 │  └─────────────────────────────────────────┘ │
-│  Requires: pid: host, network_mode: host     │
+│  Volume: /proc → /host-proc (read-only)      │
+│  Volume: /var/run/docker.sock (optional, :ro) │
 └──────────────────────────────────────────────┘
 ```
 
@@ -172,6 +234,7 @@ cd frontend && npm test
 3. **Cache** — `singleflight.Group` coalesces concurrent requests; serves stale data if a fresh fetch fails
 4. **API** — `POST /api/auth` for token validation and `GET /api/sockets` for socket data with protocol and IP version filters
 5. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness, optional token-based authentication
+6. **Docker Monitor** (optional) — queries Docker Engine API via unix socket for container metadata, maps containers to sockets by PID (host-network) or port binding (bridge-network)
 
 ## Deployment
 
@@ -179,11 +242,12 @@ The project ships as a single Docker container with the Vue.js frontend embedded
 
 | Service | Base Image | Notes |
 |---------|-----------|-------|
-| `ports` | `distroless/static-debian12` | Runs as non-root (UID 65534). Requires `pid: host` + `network_mode: host`. Published to `ghcr.io/macedot/ports` |
+| `ports` | `distroless/static-debian12` | Runs as non-root (UID 65534) with minimal capabilities. Host `/proc` mounted read-only. Published to `ghcr.io/macedot/ports` |
 
 ### Security
 
 - **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close).
+- **Hardened container**: No host modes (`pid: host`, `network_mode: host`). Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem, all capabilities dropped except `SYS_PTRACE` (required for process name resolution via `/proc/[pid]/fd/`). No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
 - **No auth mode**: When `ADMIN_TOKEN` is unset, the application is freely accessible. Only use this on trusted networks.
 - **Security headers**: `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are set on all responses.
 - **Non-root container**: The process runs as UID 65534 (nobody) inside the container.

@@ -32,6 +32,10 @@
           <span>Process</span>
           <span class="sort-indicator">{{ getSortIndicator('process') }}</span>
         </div>
+        <div class="header-cell sortable" @click="store.toggleSort('container')">
+          <span>Container</span>
+          <span class="sort-indicator">{{ getSortIndicator('container') }}</span>
+        </div>
       </div>
       <button class="fold-all-btn" @click="toggleAll">
         {{ isAllCollapsed ? 'Expand All' : 'Collapse All' }}
@@ -50,6 +54,9 @@
           <span class="chevron">{{ collapsedGroups.has(item.port) ? '▸' : '▾' }}</span>
           <span class="port-label">Port {{ item.port }}</span>
           <span class="count-badge">{{ item.count }} connection{{ item.count !== 1 ? 's' : '' }}</span>
+          <span v-if="item.container" class="container-group-badge" :title="item.c_image">
+            {{ item.container }}
+          </span>
         </div>
         <SocketRow v-else :item="item" :grouped="true" />
       </RecycleScroller>
@@ -126,7 +133,7 @@ const getSortIndicator = (key) => {
 
 .header-row {
   display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 140px;
+  grid-template-columns: 60px 1fr 1fr 100px 140px 160px;
   align-items: center;
   height: 36px;
   padding: 0 12px;
@@ -287,6 +294,16 @@ const getSortIndicator = (key) => {
   background: #2d2d44;
   padding: 2px 6px;
   border-radius: 3px;
+}
+
+.group-header .container-group-badge {
+  font-size: 10px;
+  color: #e0e0ff;
+  background: #7c3aed;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  margin-left: 8px;
 }
 </style>
 

@@ -14,30 +14,41 @@ import (
 
 	"listen-ports/internal/api"
 	"listen-ports/internal/cache"
+	"listen-ports/internal/docker"
 	"listen-ports/internal/parser"
 	"listen-ports/ui"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "/health" {
+		fmt.Println("ok")
+		os.Exit(0)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
+	procPath := os.Getenv("PROC_PATH")
+	if procPath == "" {
+		procPath = "/proc"
+	}
+
 	fetchFunc := func() ([]parser.SocketEntry, error) {
-		tcp, err := parser.ParseTCP()
+		tcp, err := parser.ParseTCP(procPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse TCP: %w", err)
 		}
-		tcp6, err := parser.ParseTCP6()
+		tcp6, err := parser.ParseTCP6(procPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse TCP6: %w", err)
 		}
-		udp, err := parser.ParseUDP()
+		udp, err := parser.ParseUDP(procPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse UDP: %w", err)
 		}
-		udp6, err := parser.ParseUDP6()
+		udp6, err := parser.ParseUDP6(procPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse UDP6: %w", err)
 		}
@@ -52,7 +63,21 @@ func main() {
 	}
 
 	c := cache.NewCache(fetchFunc)
-	h := api.NewHandler(c)
+
+	// Docker collector (optional)
+	dockerSocket := os.Getenv("DOCKER_HOST")
+	var dockerCache *docker.Cache
+	collector, err := docker.NewCollector(dockerSocket)
+	if err != nil {
+		log.Printf("Docker collector initialization failed: %v", err)
+	} else if collector != nil {
+		dockerCache = docker.NewCache(collector, 10*time.Second)
+		log.Println("Docker monitoring enabled")
+	} else {
+		log.Println("Docker monitoring disabled (DOCKER_HOST not set)")
+	}
+
+	h := api.NewHandler(c, procPath, dockerCache)
 
 	adminToken := os.Getenv("ADMIN_TOKEN")
 	if adminToken == "" {
@@ -64,6 +89,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/auth", api.AuthHandler(adminToken))
 	mux.Handle("/api/sockets", api.AuthMiddleware(adminToken)(h))
+	mux.Handle("/api/containers", api.AuthMiddleware(adminToken)(api.ContainersHandler(dockerCache)))
 	mux.Handle("/", spaHandler())
 
 	srv := &http.Server{
