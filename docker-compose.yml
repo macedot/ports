@@ -9,6 +9,7 @@ services:
       - "8080:8080"
     volumes:
       - /proc:/host-proc:ro
+      - /etc/localtime:/etc/localtime:ro
       # Optional: Docker container monitoring
       #
       # 1. Find your host docker GID:

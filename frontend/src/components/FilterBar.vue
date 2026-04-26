@@ -48,12 +48,32 @@
         🐳 off
       </span>
     </div>
+
+    <div class="filter-group">
+      <button class="freeze-btn" :class="{ active: props.isFrozen }" @click="emit('toggle-freeze')" :title="props.isFrozen ? 'Resume live updates' : 'Pause live updates'">
+        {{ props.isFrozen ? '▶' : '⏸' }}
+      </button>
+    </div>
+
+    <div class="filter-group">
+      <button class="export-btn" @click="exportCSV" title="Export as CSV">
+        ↓ CSV
+      </button>
+      <button class="export-btn" @click="exportJSON" title="Export as JSON">
+        ↓ JSON
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { useSocketsStore } from '../stores/sockets'
 import { storeToRefs } from 'pinia'
+
+const props = defineProps({
+  isFrozen: { type: Boolean, default: false }
+})
+const emit = defineEmits(['toggle-freeze'])
 
 const store = useSocketsStore()
 const { protoFilter, ipVerFilter, containerFilter, hasContainerData, dockerError } = storeToRefs(store)
@@ -75,6 +95,71 @@ const containerOptions = [
   { label: 'Docker', value: 'with' },
   { label: 'No Docker', value: 'without' }
 ]
+
+function csvEscape(field) {
+  const str = String(field ?? '')
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"'
+  }
+  return str
+}
+
+function getExportData() {
+  return store.filteredAndSortedSockets.filter(item => item._type === 'socket')
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportCSV() {
+  const data = getExportData()
+  const headers = ['protocol', 'local_addr', 'local_port', 'remote_addr', 'remote_port', 'state', 'process', 'command', 'container', 'image']
+  const rows = [headers.map(csvEscape).join(',')]
+
+  for (const item of data) {
+    rows.push([
+      csvEscape(item.protocol),
+      csvEscape(item.local_addr),
+      csvEscape(item.local_port),
+      csvEscape(item.remote_addr),
+      csvEscape(item.remote_port),
+      csvEscape(item.state),
+      csvEscape(item.process),
+      csvEscape(item.command),
+      csvEscape(item.container),
+      csvEscape(item.c_image)
+    ].join(','))
+  }
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  downloadBlob(blob, `ports-${Date.now()}.csv`)
+}
+
+function exportJSON() {
+  const data = getExportData().map(item => ({
+    protocol: item.protocol,
+    local_addr: item.local_addr,
+    local_port: item.local_port,
+    remote_addr: item.remote_addr,
+    remote_port: item.remote_port,
+    state: item.state,
+    process: item.process,
+    command: item.command || null,
+    exe: item.exe || null,
+    container: item.container || null,
+    image: item.c_image || null,
+    network: item.c_network || null
+  }))
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8;' })
+  downloadBlob(blob, `ports-${Date.now()}.json`)
+}
 </script>
 
 <style scoped>
@@ -160,5 +245,46 @@ const containerOptions = [
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: help;
+}
+
+.freeze-btn {
+  padding: 6px 12px;
+  border: 1px solid #2d2d44;
+  border-radius: 6px;
+  background-color: #252540;
+  color: #a0a0c0;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  line-height: 1;
+}
+
+.freeze-btn:hover {
+  background-color: #2d2d50;
+  color: #c0c0e0;
+}
+
+.freeze-btn.active {
+  background-color: #7c3aed;
+  color: #ffffff;
+  border-color: #7c3aed;
+}
+
+.export-btn {
+  padding: 6px 12px;
+  border: 1px solid #2d2d44;
+  border-radius: 6px;
+  background-color: #252540;
+  color: #a0a0c0;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.export-btn:hover {
+  background-color: #2d2d50;
+  color: #c0c0e0;
 }
 </style>

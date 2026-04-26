@@ -126,6 +126,8 @@ type SocketResponse struct {
 	Container  *string `json:"container,omitempty"`
 	CImage     *string `json:"c_image,omitempty"`
 	CNetwork   *string `json:"c_network,omitempty"`
+	Command    *string `json:"command,omitempty"`
+	Exe        *string `json:"exe,omitempty"`
 }
 
 type SocketsResponse struct {
@@ -244,11 +246,20 @@ func filterAndEnrichSockets(data []parser.SocketEntry, processMap map[uint64]map
 
 		processName := ""
 		var containerName, cImage, cNetwork *string
+		var command, exePath *string
 		if procInfo, ok := processMap[entry.Inode]; ok {
 			if procInfo.Name != "" {
 				processName = procInfo.Name
 			} else if procInfo.PID > 0 {
 				processName = fmt.Sprintf("pid:%d", procInfo.PID)
+			}
+			if procInfo.Command != "" {
+				cmd := procInfo.Command
+				command = &cmd
+			}
+			if procInfo.Exe != "" {
+				exe := procInfo.Exe
+				exePath = &exe
 			}
 
 			// Match container by PID (host-network)
@@ -287,6 +298,8 @@ func filterAndEnrichSockets(data []parser.SocketEntry, processMap map[uint64]map
 			Container:  containerName,
 			CImage:     cImage,
 			CNetwork:   cNetwork,
+			Command:    command,
+			Exe:        exePath,
 		})
 	}
 

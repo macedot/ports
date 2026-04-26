@@ -69,9 +69,13 @@ func TestInodeExtraction(t *testing.T) {
 }
 
 func TestBuildProcessInfoErrors(t *testing.T) {
-	_, err := buildProcessInfo("/proc", 999999)
-	if err != nil {
-		t.Logf("buildProcessInfo correctly returned error for invalid PID: %v", err)
+	procInfo := buildProcessInfo("/proc", 999999)
+	// buildProcessInfo is non-fatal, returns empty struct
+	if procInfo == nil {
+		t.Fatal("expected non-nil ProcessInfo")
+	}
+	if procInfo.Name != "" {
+		t.Errorf("expected empty name for invalid PID, got %q", procInfo.Name)
 	}
 }
 
@@ -197,5 +201,115 @@ func TestReadProcessName_CmdlineFallback(t *testing.T) {
 	// Should extract basename
 	if name != "test-process" {
 		t.Errorf("expected basename 'test-process', got %q", name)
+	}
+}
+
+func TestReadCommandLine(t *testing.T) {
+	tmpDir := t.TempDir()
+	pid := 99997
+
+	cmdlinePath := filepath.Join(tmpDir, strconv.Itoa(pid), "cmdline")
+	if err := os.MkdirAll(filepath.Dir(cmdlinePath), 0755); err != nil {
+		t.Skipf("cannot create cmdline dir: %v", err)
+	}
+
+	cmdline := "/usr/bin/test-process\x00arg1\x00arg2 with space\x00"
+	if err := os.WriteFile(cmdlinePath, []byte(cmdline), 0644); err != nil {
+		t.Skipf("cannot write cmdline: %v", err)
+	}
+
+	result := readCommandLine(tmpDir, pid)
+	expected := "/usr/bin/test-process arg1 arg2 with space"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReadExePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	pid := 99996
+
+	exePath := filepath.Join(tmpDir, strconv.Itoa(pid), "exe")
+	if err := os.MkdirAll(filepath.Dir(exePath), 0755); err != nil {
+		t.Skipf("cannot create exe dir: %v", err)
+	}
+
+	if err := os.Symlink("/usr/bin/python3", exePath); err != nil {
+		t.Skipf("cannot create exe symlink: %v", err)
+	}
+
+	result := readExePath(tmpDir, pid)
+	expected := "/usr/bin/python3"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReadCommandLineEmpty(t *testing.T) {
+	result := readCommandLine("/proc", 999999)
+	if result != "" {
+		t.Errorf("expected empty string for missing cmdline, got %q", result)
+	}
+}
+
+func TestReadExePathMissing(t *testing.T) {
+	result := readExePath("/proc", 999999)
+	if result != "" {
+		t.Errorf("expected empty string for missing exe, got %q", result)
+	}
+}
+
+func TestBuildProcessInfoAllFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	pid := 99995
+
+	statusPath := filepath.Join(tmpDir, strconv.Itoa(pid), "status")
+	cmdlinePath := filepath.Join(tmpDir, strconv.Itoa(pid), "cmdline")
+	exePath := filepath.Join(tmpDir, strconv.Itoa(pid), "exe")
+	fdPath := filepath.Join(tmpDir, strconv.Itoa(pid), "fd")
+
+	if err := os.MkdirAll(fdPath, 0755); err != nil {
+		t.Skipf("cannot create fd dir: %v", err)
+	}
+
+	// Create socket fd so this PID isn't skipped
+	socketLink := filepath.Join(fdPath, "0")
+	if err := os.Symlink("socket:[99999]", socketLink); err != nil {
+		t.Skipf("cannot create socket symlink: %v", err)
+	}
+
+	// Write status with Name
+	if err := os.WriteFile(statusPath, []byte("Name:\tmock-proc\n"), 0644); err != nil {
+		t.Skipf("cannot write status: %v", err)
+	}
+
+	// Write cmdline with multiple args
+	if err := os.WriteFile(cmdlinePath, []byte("/opt/app/bin/server\x00--config\x00/etc/app.conf\x00"), 0644); err != nil {
+		t.Skipf("cannot write cmdline: %v", err)
+	}
+
+	// Create exe symlink
+	if err := os.Symlink("/opt/app/bin/server", exePath); err != nil {
+		t.Skipf("cannot create exe symlink: %v", err)
+	}
+
+	result, err := BuildProcessMap(tmpDir)
+	if err != nil {
+		t.Fatalf("BuildProcessMap failed: %v", err)
+	}
+
+	info, ok := result[99999]
+	if !ok {
+		t.Fatal("expected inode 99999 to be recorded")
+	}
+
+	if info.Name != "mock-proc" {
+		t.Errorf("expected Name 'mock-proc', got %q", info.Name)
+	}
+	if info.Command != "/opt/app/bin/server --config /etc/app.conf" {
+		t.Errorf("expected Command '/opt/app/bin/server --config /etc/app.conf', got %q", info.Command)
+	}
+	if info.Exe != "/opt/app/bin/server" {
+		t.Errorf("expected Exe '/opt/app/bin/server', got %q", info.Exe)
 	}
 }

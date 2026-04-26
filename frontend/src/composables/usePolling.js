@@ -3,7 +3,7 @@ import { ref, onUnmounted } from 'vue'
 /**
  * Polls the backend API every 5 seconds with tab visibility awareness.
  * @param {import('../stores/sockets').useSocketsStore} store - Pinia sockets store
- * @returns {{ refresh: () => void }}
+ * @returns {{ refresh: () => void, isFrozen: import('vue').Ref<boolean>, toggleFreeze: () => void }}
  */
 export function usePolling(store) {
   const INTERVAL_MS = 5000
@@ -11,6 +11,7 @@ export function usePolling(store) {
   let abortController = new AbortController()
 
   const isPolling = ref(false)
+  const isFrozen = ref(false)
 
   function shouldSkip() {
     return store.isLoading
@@ -71,10 +72,22 @@ export function usePolling(store) {
 
   function onVisibilityChange() {
     if (document.visibilityState === 'visible') {
-      fetchSockets()
-      startPolling()
+      if (!isFrozen.value) {
+        fetchSockets()
+        startPolling()
+      }
     } else {
       stopPolling()
+    }
+  }
+
+  function toggleFreeze() {
+    isFrozen.value = !isFrozen.value
+    if (isFrozen.value) {
+      stopPolling()
+    } else {
+      fetchSockets()
+      startPolling()
     }
   }
 
@@ -97,5 +110,5 @@ export function usePolling(store) {
     document.removeEventListener('visibilitychange', onVisibilityChange)
   })
 
-  return { refresh, fetchSockets }
+  return { refresh, fetchSockets, isFrozen, toggleFreeze }
 }

@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -10,8 +11,10 @@ import (
 )
 
 type ProcessInfo struct {
-	PID  int
-	Name string
+	PID     int
+	Name    string // short name from status/comm/cmdline-basename
+	Command string // full command line from /proc/[pid]/cmdline (args joined with spaces)
+	Exe     string // executable path from readlink /proc/[pid]/exe
 }
 
 func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
@@ -45,27 +48,40 @@ func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 
 		// Try to get process name — non-fatal if it fails
 		name := ""
-		procInfo, err := buildProcessInfo(procPath, pid)
-		if err != nil {
-			log.Printf("mapper: PID %d name unreadable, using empty name: %v", pid, err)
-		} else {
-			name = procInfo.Name
-		}
+		procInfo := buildProcessInfo(procPath, pid)
+		name = procInfo.Name
 
 		for _, inode := range inodes {
-			result[inode] = ProcessInfo{PID: pid, Name: name}
+			result[inode] = ProcessInfo{PID: pid, Name: name, Command: procInfo.Command, Exe: procInfo.Exe}
 		}
 	}
 
 	return result, nil
 }
 
-func buildProcessInfo(procPath string, pid int) (*ProcessInfo, error) {
-	name, err := readProcessName(procPath, pid)
+func buildProcessInfo(procPath string, pid int) *ProcessInfo {
+	name, _ := readProcessName(procPath, pid)
+	command := readCommandLine(procPath, pid)
+	exe := readExePath(procPath, pid)
+	return &ProcessInfo{PID: pid, Name: name, Command: command, Exe: exe}
+}
+
+func readCommandLine(procPath string, pid int) string {
+	cmdlinePath := filepath.Join(procPath, strconv.Itoa(pid), "cmdline")
+	data, err := os.ReadFile(cmdlinePath)
 	if err != nil {
-		return nil, err
+		return ""
 	}
-	return &ProcessInfo{PID: pid, Name: name}, nil
+	return strings.TrimSpace(strings.ReplaceAll(string(data), "\x00", " "))
+}
+
+func readExePath(procPath string, pid int) string {
+	exePath := filepath.Join(procPath, strconv.Itoa(pid), "exe")
+	target, err := os.Readlink(exePath)
+	if err != nil {
+		return ""
+	}
+	return target
 }
 
 func readProcessName(procPath string, pid int) (string, error) {
@@ -120,6 +136,9 @@ func readSocketInodes(procPath string, pid int) ([]uint64, error) {
 		target, err := os.Readlink(linkPath)
 		if err != nil {
 			if os.IsNotExist(err) {
+				continue
+			}
+			if errors.Is(err, os.ErrPermission) {
 				continue
 			}
 			log.Printf("mapper: readlink %s failed: %v", linkPath, err)

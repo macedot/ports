@@ -8,7 +8,7 @@
     <span class="col-state">
       <span class="badge" :class="stateClass">{{ item.state }}</span>
     </span>
-    <span class="col-process">{{ displayProcess }}</span>
+    <span class="col-process" :title="processTooltip">{{ displayProcess }}</span>
     <span class="col-container">
       <span v-if="item.container" class="container-badge" :title="item.c_image">
         {{ displayContainer }}
@@ -51,6 +51,13 @@ const stateClass = computed(() => {
 
 const displayProcess = computed(() => {
   return props.item.process?.trim() || '?'
+})
+
+const processTooltip = computed(() => {
+  const parts = []
+  if (props.item.command) parts.push(props.item.command)
+  if (props.item.exe) parts.push(`[${props.item.exe}]`)
+  return parts.length > 0 ? parts.join(' ') : ''
 })
 
 const displayContainer = computed(() => {

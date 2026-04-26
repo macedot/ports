@@ -35,7 +35,7 @@ export const useSocketsStore = defineStore('sockets', () => {
       // Regex search filter (matches against all text fields)
       if (searchRegex.value) {
         const re = searchRegex.value
-        const haystack = `${sock.protocol} ${sock.local_addr} ${sock.local_port} ${sock.remote_addr} ${sock.remote_port} ${sock.state} ${sock.process} ${sock.container || ''} ${sock.c_image || ''} ${sock.c_network || ''}`
+        const haystack = `${sock.protocol} ${sock.local_addr} ${sock.local_port} ${sock.remote_addr} ${sock.remote_port} ${sock.state} ${sock.process} ${sock.container || ''} ${sock.c_image || ''} ${sock.c_network || ''} ${sock.command || ''} ${sock.exe || ''}`
         if (!re.test(haystack)) return false
       }
 

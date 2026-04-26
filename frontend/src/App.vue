@@ -18,7 +18,7 @@
       {{ error }}
     </div>
 
-    <FilterBar />
+    <FilterBar :is-frozen="isFrozen" @toggle-freeze="toggleFreeze" />
     <SocketTable />
   </div>
 
@@ -55,7 +55,7 @@ import SocketTable from './components/SocketTable.vue'
 
 const store = useSocketsStore()
 const { error, isLoading, updatedAt } = storeToRefs(store)
-const { refresh } = usePolling(store)
+const { refresh, isFrozen, toggleFreeze } = usePolling(store)
 
 // Auth state
 const authToken = ref(sessionStorage.getItem('admin_token') || '')
