@@ -313,3 +313,45 @@ func TestBuildProcessInfoAllFields(t *testing.T) {
 		t.Errorf("expected Exe '/opt/app/bin/server', got %q", info.Exe)
 	}
 }
+
+func TestBuildProcessInfo_ExeFallbackForName(t *testing.T) {
+	// When status/comm/cmdline are all unreadable, exe basename should be used as Name
+	tmpDir := t.TempDir()
+	pid := 99994
+
+	exePath := filepath.Join(tmpDir, strconv.Itoa(pid), "exe")
+	fdPath := filepath.Join(tmpDir, strconv.Itoa(pid), "fd")
+
+	if err := os.MkdirAll(fdPath, 0755); err != nil {
+		t.Skipf("cannot create fd dir: %v", err)
+	}
+
+	// Create socket fd
+	socketLink := filepath.Join(fdPath, "0")
+	if err := os.Symlink("socket:[88888]", socketLink); err != nil {
+		t.Skipf("cannot create socket symlink: %v", err)
+	}
+
+	// No status/comm/cmdline — only exe symlink
+	if err := os.Symlink("/usr/bin/docker-proxy", exePath); err != nil {
+		t.Skipf("cannot create exe symlink: %v", err)
+	}
+
+	result, err := BuildProcessMap(tmpDir)
+	if err != nil {
+		t.Fatalf("BuildProcessMap failed: %v", err)
+	}
+
+	info, ok := result[88888]
+	if !ok {
+		t.Fatal("expected inode 88888 to be recorded")
+	}
+
+	// Name should fall back to exe basename
+	if info.Name != "docker-proxy" {
+		t.Errorf("expected Name 'docker-proxy' (exe basename fallback), got %q", info.Name)
+	}
+	if info.Exe != "/usr/bin/docker-proxy" {
+		t.Errorf("expected Exe '/usr/bin/docker-proxy', got %q", info.Exe)
+	}
+}

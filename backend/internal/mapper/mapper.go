@@ -63,6 +63,12 @@ func buildProcessInfo(procPath string, pid int) *ProcessInfo {
 	name, _ := readProcessName(procPath, pid)
 	command := readCommandLine(procPath, pid)
 	exe := readExePath(procPath, pid)
+
+	// Fallback: use exe basename when status/comm/cmdline all fail
+	if name == "" && exe != "" {
+		name = filepath.Base(exe)
+	}
+
 	return &ProcessInfo{PID: pid, Name: name, Command: command, Exe: exe}
 }
 
