@@ -24,4 +24,5 @@ FROM gcr.io/distroless/static-debian12
 ENV PORT=8080
 EXPOSE 8080
 COPY --from=backend-build /app/server /app/server
+USER 65534:65534
 ENTRYPOINT ["/app/server"]

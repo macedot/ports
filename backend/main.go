@@ -54,13 +54,24 @@ func main() {
 	c := cache.NewCache(fetchFunc)
 	h := api.NewHandler(c)
 
+	adminToken := os.Getenv("ADMIN_TOKEN")
+	if adminToken == "" {
+		log.Println("ADMIN_TOKEN not set — authentication disabled")
+	} else {
+		log.Println("ADMIN_TOKEN set — authentication enabled")
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/api/sockets", h)
+	mux.Handle("/api/auth", api.AuthHandler(adminToken))
+	mux.Handle("/api/sockets", api.AuthMiddleware(adminToken)(h))
 	mux.Handle("/", spaHandler())
 
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: mux,
+		Addr:         ":" + port,
+		Handler:      securityHeaders(mux),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	go func() {
@@ -84,6 +95,14 @@ func main() {
 	log.Println("Server stopped")
 }
 
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func spaHandler() http.Handler {
 	distFS, err := fs.Sub(ui.DistFS, "dist")
 	if err != nil {
@@ -92,9 +111,6 @@ func spaHandler() http.Handler {
 	fileServer := http.FileServer(http.FS(distFS))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-
 		path := r.URL.Path
 
 		if path != "/" {

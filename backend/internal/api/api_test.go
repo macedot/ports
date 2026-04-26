@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"listen-ports/internal/mapper"
@@ -331,5 +333,205 @@ func TestSocketsResponse_JSONFields(t *testing.T) {
 	}
 	if _, ok := unmarshaled["count"]; !ok {
 		t.Error("response missing count field")
+	}
+}
+
+// AuthMiddleware tests
+
+func TestAuthMiddleware_EmptyToken_Passthrough(t *testing.T) {
+	middleware := AuthMiddleware("")
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sockets", nil)
+	w := httptest.NewRecorder()
+	middleware(next).ServeHTTP(w, req)
+
+	if !nextCalled {
+		t.Error("expected next handler to be called with empty token")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+}
+
+func TestAuthMiddleware_ValidBearerToken_200(t *testing.T) {
+	expected := "secret-token"
+	middleware := AuthMiddleware(expected)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sockets", nil)
+	req.Header.Set("Authorization", "Bearer "+expected)
+	w := httptest.NewRecorder()
+	middleware(next).ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+}
+
+func TestAuthMiddleware_MissingAuthHeader_401(t *testing.T) {
+	middleware := AuthMiddleware("some-token")
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("next handler should not be called")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sockets", nil)
+	w := httptest.NewRecorder()
+	middleware(next).ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["error"] != "unauthorized" {
+		t.Errorf("expected error 'unauthorized', got '%s'", resp["error"])
+	}
+}
+
+func TestAuthMiddleware_WrongBearerToken_401(t *testing.T) {
+	middleware := AuthMiddleware("correct-token")
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("next handler should not be called")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sockets", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	w := httptest.NewRecorder()
+	middleware(next).ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["error"] != "unauthorized" {
+		t.Errorf("expected error 'unauthorized', got '%s'", resp["error"])
+	}
+}
+
+func TestAuthMiddleware_NonBearerScheme_401(t *testing.T) {
+	middleware := AuthMiddleware("any-token")
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("next handler should not be called")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sockets", nil)
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+	w := httptest.NewRecorder()
+	middleware(next).ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["error"] != "unauthorized" {
+		t.Errorf("expected error 'unauthorized', got '%s'", resp["error"])
+	}
+}
+
+// AuthHandler tests
+
+func TestAuthHandler_POST_CorrectToken_200(t *testing.T) {
+	expected := "valid-token"
+	handler := AuthHandler(expected)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth", nil)
+	req.Header.Set("Authorization", "Bearer "+expected)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp map[string]bool
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["valid"] != true {
+		t.Errorf("expected valid=true, got %v", resp["valid"])
+	}
+}
+
+func TestAuthHandler_POST_WrongToken_401(t *testing.T) {
+	expected := "correct-token"
+	handler := AuthHandler(expected)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["error"] != "invalid token" {
+		t.Errorf("expected error 'invalid token', got '%s'", resp["error"])
+	}
+}
+
+func TestAuthHandler_POST_EmptyExpectedToken_DevMode_200(t *testing.T) {
+	handler := AuthHandler("") // empty = dev mode
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200 in dev mode, got %d", w.Code)
+	}
+
+	var resp map[string]bool
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["valid"] != true {
+		t.Errorf("expected valid=true in dev mode, got %v", resp["valid"])
+	}
+}
+
+func TestAuthHandler_GET_Method_405(t *testing.T) {
+	handler := AuthHandler("some-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status 405, got %d", w.Code)
+	}
+}
+
+func TestAuthHandler_MissingAuthHeader_401(t *testing.T) {
+	handler := AuthHandler("any-token")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", w.Code)
 	}
 }

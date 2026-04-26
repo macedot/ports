@@ -31,7 +31,7 @@
 docker compose up --build
 ```
 
-Open [http://localhost:80](http://localhost:80).
+Open [http://localhost:8080](http://localhost:8080).
 
 ### Pre-built images (from GitHub release)
 
@@ -47,6 +47,7 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP listen port |
 | `CACHE_TTL` | `2s` | Response cache TTL (Go duration: `5s`, `1m`, etc.) |
+| `ADMIN_TOKEN` | _(unset)_ | Shared secret for authentication. When set, all API requests require `Authorization: Bearer <token>` header. When unset, authentication is disabled. |
 
 ### Docker Compose
 
@@ -54,10 +55,30 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 |----------|---------|-------------|
 | `GHCR_OWNER` | `macedot` | GHCR image namespace |
 | `IMAGE_TAG` | `latest` | Image tag for both services |
+| `ADMIN_TOKEN` | _(unset)_ | Uncomment in `docker-compose.yml` to enable authentication |
 
 > The backend runs with `pid: host` and `network_mode: host` to access the host's `/proc` filesystem. This is required for socket enumeration and process resolution.
 
 ## API
+
+### `POST /api/auth`
+
+Validates the admin token. Always responds — when `ADMIN_TOKEN` is unset, returns `{"valid": true}` without checking.
+
+**Request:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{"valid": true}
+```
+
+**Response (401):**
+```json
+{"error": "invalid token"}
+```
 
 ### `GET /api/sockets`
 
@@ -125,24 +146,22 @@ cd frontend && npm test
 
 ```
 ┌──────────────────────────────────────────────┐
-│  Browser :80                                 │
+│  Single Container (ports)                   │
 │  ┌─────────────────────────────────────────┐ │
-│  │  Vue.js 3 + Pinia + vue-virtual-scroller│ │
-│  │  Polls /api/sockets every 5s            │ │
-│  └─────────────┬───────────────────────────┘ │
-│                │                              │
-│  ┌─────────────▼───────────────────────────┐ │
-│  │  nginx (reverse proxy)                  │ │
-│  │  /api/* → backend:8080                  │ │
-│  │  /*     → static SPA                    │ │
-│  └─────────────┬───────────────────────────┘ │
-│                │                              │
-│  ┌─────────────▼───────────────────────────┐ │
-│  │  Go Backend :8080                       │ │
-│  │  /proc/net/{tcp,tcp6,udp,udp6} parser  │ │
-│  │  /proc/[pid]/fd → inode → process map  │ │
-│  │  singleflight cache (configurable TTL)  │ │
+│  │  Go Binary :8080                        │ │
+│  │  ┌───────────────────────────────────┐  │ │
+│  │  │  Embedded Vue.js SPA (go:embed)   │  │ │
+│  │  │  Polls /api/sockets every 5s      │  │ │
+│  │  └───────────────────────────────────┘  │ │
+│  │  ┌───────────────────────────────────┐  │ │
+│  │  │  Go Backend                       │  │ │
+│  │  │  /proc/net/{tcp,tcp6,udp,udp6}   │  │ │
+│  │  │  /proc/[pid]/fd → process map    │  │ │
+│  │  │  singleflight cache (TTL)         │  │ │
+│  │  │  Optional ADMIN_TOKEN auth        │  │ │
+│  │  └───────────────────────────────────┘  │ │
 │  └─────────────────────────────────────────┘ │
+│  Requires: pid: host, network_mode: host     │
 └──────────────────────────────────────────────┘
 ```
 
@@ -151,18 +170,24 @@ cd frontend && npm test
 1. **Parser** — reads `/proc/net/{tcp,tcp6,udp,udp6}` and decodes hex addresses, ports, and connection states
 2. **Mapper** — walks `/proc/[pid]/fd/*` symlinks, matches `socket:[inode]` patterns to resolve the owning process
 3. **Cache** — `singleflight.Group` coalesces concurrent requests; serves stale data if a fresh fetch fails
-4. **API** — single `GET /api/sockets` endpoint with protocol and IP version filters
-5. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness
+4. **API** — `POST /api/auth` for token validation and `GET /api/sockets` for socket data with protocol and IP version filters
+5. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness, optional token-based authentication
 
 ## Deployment
 
-The project ships three Docker containers orchestrated by Compose:
+The project ships as a single Docker container with the Vue.js frontend embedded in the Go binary:
 
 | Service | Base Image | Notes |
 |---------|-----------|-------|
-| `backend` | `distroless/static-debian12` | Requires `pid: host` + `network_mode: host` |
-| `frontend` | `nginx:alpine` | Serves static SPA + proxies `/api` |
-| — | — | Published to `ghcr.io/macedot/ports/{backend,frontend}` |
+| `ports` | `distroless/static-debian12` | Runs as non-root (UID 65534). Requires `pid: host` + `network_mode: host`. Published to `ghcr.io/macedot/ports` |
+
+### Security
+
+- **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close).
+- **No auth mode**: When `ADMIN_TOKEN` is unset, the application is freely accessible. Only use this on trusted networks.
+- **Security headers**: `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are set on all responses.
+- **Non-root container**: The process runs as UID 65534 (nobody) inside the container.
+- **TLS**: The server listens on plain HTTP. For production, run behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik).
 
 ## CI/CD
 

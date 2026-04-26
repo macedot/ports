@@ -28,7 +28,17 @@ export function usePolling(store) {
     store.isLoading = true
 
     try {
-      const res = await fetch('/api/sockets', { signal: controller.signal })
+      const token = sessionStorage.getItem('admin_token')
+      const headers = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      const res = await fetch('/api/sockets', { signal: controller.signal, headers })
+      if (res.status === 401) {
+        sessionStorage.removeItem('admin_token')
+        window.dispatchEvent(new CustomEvent('auth:required'))
+        return
+      }
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       }
@@ -87,5 +97,5 @@ export function usePolling(store) {
     document.removeEventListener('visibilitychange', onVisibilityChange)
   })
 
-  return { refresh }
+  return { refresh, fetchSockets }
 }

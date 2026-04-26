@@ -12,4 +12,5 @@ services:
     environment:
       PORT: "8080"
       CACHE_TTL: "2s"
+      # ADMIN_TOKEN: "change-me"  # Set a strong token to enable authentication
     restart: unless-stopped

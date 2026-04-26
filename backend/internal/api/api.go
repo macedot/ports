@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -9,6 +10,96 @@ import (
 	"listen-ports/internal/mapper"
 	"listen-ports/internal/parser"
 )
+
+// AuthMiddleware validates Bearer token for protected routes.
+func AuthMiddleware(expectedToken string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expectedToken == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(`{"error":"unauthorized"}`))
+				return
+			}
+
+			const bearerPrefix = "Bearer "
+			if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(`{"error":"unauthorized"}`))
+				return
+			}
+
+			token := authHeader[len(bearerPrefix):]
+			if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) != 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(`{"error":"unauthorized"}`))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// AuthHandler validates token via POST /api/auth.
+func AuthHandler(expectedToken string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		if r.URL.Path != "/api/auth" {
+			http.NotFound(w, r)
+			return
+		}
+
+		if expectedToken == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"valid": true}`))
+			return
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, 1024) // 1KB limit for auth payload
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"invalid token"}`))
+			return
+		}
+
+		const bearerPrefix = "Bearer "
+		if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"invalid token"}`))
+			return
+		}
+
+		token := authHeader[len(bearerPrefix):]
+		if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) != 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"invalid token"}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"valid": true}`))
+	})
+}
 
 type Handler struct {
 	cache *cache.Cache
