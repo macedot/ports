@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ContainerInfo holds relevant container data
@@ -37,7 +39,6 @@ type dockerContainer struct {
 	Image   string   `json:"Image"`
 	State   string   `json:"State"`
 	Status  string   `json:"Status"`
-	Pid     int      `json:"Pid,omitempty"`
 	Ports   []dockerPort `json:"Ports"`
 	HostConfig struct {
 		NetworkMode string `json:"NetworkMode"`
@@ -92,6 +93,35 @@ func NewCollector(socketPath string) (*Collector, error) {
 	}, nil
 }
 
+// inspectContainerPID fetches the PID for a single container via inspect API.
+func (c *Collector) inspectContainerPID(ctx context.Context, containerID string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.host+"/containers/"+containerID+"/json", nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create inspect request: %w", err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to inspect container %s: %w", containerID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("inspect returned status %d for %s", resp.StatusCode, containerID)
+	}
+
+	var inspectResp struct {
+		State struct {
+			Pid int `json:"Pid"`
+		} `json:"State"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
+		return 0, fmt.Errorf("failed to decode inspect response: %w", err)
+	}
+
+	return inspectResp.State.Pid, nil
+}
+
 // Collect fetches the list of running containers
 func (c *Collector) Collect(ctx context.Context) ([]ContainerInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", c.host+"/containers/json?all=false", nil)
@@ -123,11 +153,29 @@ func (c *Collector) Collect(ctx context.Context) ([]ContainerInfo, error) {
 			Status:      c.Status,
 			State:       c.State,
 			NetworkMode: c.HostConfig.NetworkMode,
-			PID:         c.Pid,
+			PID:         0, // PID fetched via inspect below
 			Ports:       extractPorts(c),
 		}
 		result = append(result, info)
 	}
+
+	// Fetch PIDs via inspect (not available in /containers/json)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(10) // max 10 concurrent inspect requests
+
+	for i := range result {
+		i := i
+		g.Go(func() error {
+			pid, err := c.inspectContainerPID(gctx, containers[i].ID)
+			if err != nil {
+				// Non-fatal: container may have exited between list and inspect
+				return nil
+			}
+			result[i].PID = pid
+			return nil
+		})
+	}
+	_ = g.Wait() // errors are silently skipped (container may have exited)
 
 	return result, nil
 }

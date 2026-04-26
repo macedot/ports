@@ -26,7 +26,7 @@ type Cache struct {
 
 func NewCache(fetchFunc func() ([]parser.SocketEntry, error)) *Cache {
 	ttlStr := os.Getenv("CACHE_TTL")
-	ttl := 2 * time.Second
+	ttl := 10 * time.Second
 	if ttlStr != "" {
 		if parsed, err := time.ParseDuration(ttlStr); err == nil && parsed > 0 {
 			ttl = parsed

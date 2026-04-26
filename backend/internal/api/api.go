@@ -248,8 +248,8 @@ func filterAndEnrichSockets(data []parser.SocketEntry, processMap map[uint64]map
 			}
 		}
 
-		// Match container by port binding (bridge-network, for LISTEN sockets)
-		if containerName == nil && entry.State == "LISTEN" {
+		// Match container by port binding (bridge-network containers)
+		if containerName == nil {
 			// Try matching port with exact protocol (TCP, UDP, etc.)
 			key := portKey{port: entry.LocalPort, proto: entry.Protocol}
 			if cInfo, ok := containerPortMap[key]; ok {

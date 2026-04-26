@@ -3,8 +3,10 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -19,47 +21,56 @@ func TestNewCollector_EmptyPath(t *testing.T) {
 }
 
 func TestCollect_BasicContainers(t *testing.T) {
-	// Create a mock server
-	mockResp := []dockerContainer{
-		{
-			ID:     "abc123def456789",
-			Names:  []string{"/my-nginx"},
-			Image:  "nginx:latest",
-			State:  "running",
-			Status: "Up 2 hours",
-			Pid:    1234,
-			HostConfig: struct {
-				NetworkMode string `json:"NetworkMode"`
-			}{NetworkMode: "bridge"},
-			Ports: []dockerPort{
-				{IP: "0.0.0.0", PrivatePort: 80, PublicPort: 8080, Type: "tcp"},
-			},
-		},
-		{
-			ID:     "def456abc789012",
-			Names:  []string{"/my-app"},
-			Image:  "myapp:v1",
-			State:  "running",
-			Status: "Up 5 minutes",
-			Pid:    5678,
-			HostConfig: struct {
-				NetworkMode string `json:"NetworkMode"`
-			}{NetworkMode: "host"},
-		},
-	}
-	payload, _ := json.Marshal(mockResp)
-
 	// Create unix socket pair for testing
 	// Use a real HTTP server and connect via unix socket
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/containers/json" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.URL.Query().Get("all") != "false" {
-			t.Errorf("expected all=false")
-		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(payload)
+
+		// Handle list endpoint first
+		if r.URL.Path == "/containers/json" {
+			if r.URL.Query().Get("all") != "false" {
+				t.Errorf("expected all=false")
+			}
+
+			mockResp := []dockerContainer{
+				{
+					ID:     "abc123def456789",
+					Names:  []string{"/my-nginx"},
+					Image:  "nginx:latest",
+					State:  "running",
+					Status: "Up 2 hours",
+					HostConfig: struct {
+						NetworkMode string `json:"NetworkMode"`
+					}{NetworkMode: "bridge"},
+					Ports: []dockerPort{
+						{IP: "0.0.0.0", PrivatePort: 80, PublicPort: 8080, Type: "tcp"},
+					},
+				},
+				{
+					ID:     "def456abc789012",
+					Names:  []string{"/my-app"},
+					Image:  "myapp:v1",
+					State:  "running",
+					Status: "Up 5 minutes",
+					HostConfig: struct {
+						NetworkMode string `json:"NetworkMode"`
+					}{NetworkMode: "host"},
+				},
+			}
+			payload, _ := json.Marshal(mockResp)
+			w.Write(payload)
+			return
+		}
+
+		// Handle inspect endpoint: /containers/{id}/json
+		if strings.HasPrefix(r.URL.Path, "/containers/") && strings.HasSuffix(r.URL.Path, "/json") {
+			// Return mock PID based on container ID
+			pid := 42
+			fmt.Fprintf(w, `{"State":{"Pid":%d}}`, pid)
+			return
+		}
+
+		t.Errorf("unexpected path: %s", r.URL.Path)
 	})
 
 	server := httptest.NewServer(handler)
@@ -94,8 +105,8 @@ func TestCollect_BasicContainers(t *testing.T) {
 	if c1.NetworkMode != "bridge" {
 		t.Errorf("expected NetworkMode 'bridge', got '%s'", c1.NetworkMode)
 	}
-	if c1.PID != 1234 {
-		t.Errorf("expected PID 1234, got %d", c1.PID)
+	if c1.PID != 42 {
+		t.Errorf("expected PID 42, got %d", c1.PID)
 	}
 	if len(c1.Ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(c1.Ports))
@@ -111,6 +122,9 @@ func TestCollect_BasicContainers(t *testing.T) {
 	c2 := containers[1]
 	if c2.NetworkMode != "host" {
 		t.Errorf("expected NetworkMode 'host', got '%s'", c2.NetworkMode)
+	}
+	if c2.PID != 42 {
+		t.Errorf("expected PID 42, got %d", c2.PID)
 	}
 	if len(c2.Ports) != 0 {
 		t.Errorf("expected 0 ports for host network container, got %d", len(c2.Ports))

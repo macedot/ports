@@ -15,7 +15,7 @@ services:
     environment:
       PORT: "8080"
       PROC_PATH: "/host-proc"
-      CACHE_TTL: "2s"
+      CACHE_TTL: "10s"
       # DOCKER_HOST: "/var/run/docker.sock"  # Required when docker.sock volume is mounted
       # ADMIN_TOKEN: "change-me"  # Set a strong token to enable authentication
     read_only: true

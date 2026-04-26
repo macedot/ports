@@ -15,8 +15,8 @@ func TestNewCache(t *testing.T) {
 	c := NewCache(func() ([]parser.SocketEntry, error) {
 		return nil, nil
 	})
-	if c.ttl != 2*time.Second {
-		t.Errorf("expected default TTL of 2s, got %v", c.ttl)
+	if c.ttl != 10*time.Second {
+		t.Errorf("expected default TTL of 10s, got %v", c.ttl)
 	}
 }
 

@@ -11,20 +11,22 @@
 
 ---
 
-**Listen Ports** reads `/proc/net/tcp`, `/proc/net/tcp6`, `/proc/net/udp`, `/proc/net/udp6` directly — no dependency on `ss`, `netstat`, or `lsof` — and presents every TCP/UDP socket (IPv4 + IPv6) in a dark-themed, auto-refreshing web dashboard with process name resolution.
+**Listen Ports** reads `/proc/net/tcp`, `/proc/net/tcp6`, `/proc/net/udp`, `/proc/net/udp6` directly — no dependency on `ss`, `netstat`, or `lsof` — and presents every TCP/UDP socket (IPv4 + IPv6) in a dark-themed, auto-refreshing web dashboard with process name resolution and optional Docker container detection.
 
 ## Features
 
 - **All sockets at a glance** — TCP, UDP, IPv4, IPv6 in a single view
 - **Process resolution** — maps socket inodes to owning PID and process name
-- **Client-side filtering** — by protocol (TCP / UDP / Both) and IP version (4 / 6 / Both)
+- **Docker container detection** — shows container name, image, and network mode for sockets (opt-in via Docker socket mount)
+- **Regex search** — filter sockets by any field using regular expressions
+- **Client-side filtering** — by protocol (TCP / UDP), IP version (4 / 6), and container (All / With Container / No Container)
 - **Column sorting** — click any column header to sort ascending or descending
+- **Port grouping** — sockets grouped by local port with collapsible groups
 - **Virtual scrolling** — handles thousands of sockets without lag
 - **Auto-refresh** — polls every 5 seconds, pauses when tab is hidden
-- **Manual refresh** — one-click with spinner indicator
 - **Color-coded badges** — protocol (TCP blue, UDP green) and connection state (LISTEN green, ESTABLISHED blue, TIME_WAIT orange)
 - **Server-side caching** — configurable TTL with singleflight deduplication and stale-serve on failure
-- **Docker container detection** — optionally shows container name, image, and network mode for sockets when Docker socket is mounted (opt-in, requires docker.sock read-only mount)
+- **Authentication** — optional token-based auth via `ADMIN_TOKEN` environment variable
 
 ## Quick Start
 
@@ -47,7 +49,7 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP listen port |
-| `CACHE_TTL` | `2s` | Response cache TTL (Go duration: `5s`, `1m`, etc.) |
+| `CACHE_TTL` | `10s` | Response cache TTL (Go duration: `5s`, `1m`, etc.) |
 | `PROC_PATH` | `/proc` | Base path for procfs. Set to `/host-proc` when using the hardened docker-compose. |
 | `ADMIN_TOKEN` | _(unset)_ | Shared secret for authentication. When set, all API requests require `Authorization: Bearer <token>` header. When unset, authentication is disabled. |
 | `DOCKER_HOST` | _(unset)_ | Path to Docker unix socket. Set to `/var/run/docker.sock` when mounting the Docker socket for container monitoring. |
@@ -106,13 +108,18 @@ Returns all socket entries with optional filtering.
       "remote_addr": "0.0.0.0",
       "remote_port": 0,
       "state": "LISTEN",
-      "process": "nginx"
+      "process": "nginx",
+      "container": "nginx",
+      "c_image": "nginx:alpine",
+      "c_network": "bridge"
     }
   ],
   "updated_at": "2026-04-25T12:00:00Z",
   "count": 42
 }
 ```
+
+The `container`, `c_image`, and `c_network` fields are only present when Docker monitoring is enabled and a container match is found.
 
 ### `GET /api/containers`
 
@@ -127,12 +134,12 @@ Returns all Docker containers with port mappings and metadata. Requires authenti
       "id": "a1b2c3d4e5f6",
       "name": "nginx",
       "image": "nginx:alpine",
-      "status": "running",
+      "status": "Up 2 hours",
       "state": "running",
       "network_mode": "bridge",
       "pid": 1234,
       "ports": [
-        {"host_port": 8080, "container_port": 80, "protocol": "tcp"}
+        {"host_ip": "0.0.0.0", "host_port": 8080, "container_port": 80, "protocol": "tcp"}
       ]
     }
   ]
@@ -142,28 +149,29 @@ Returns all Docker containers with port mappings and metadata. Requires authenti
 ## Docker Container Monitoring (Optional)
 
 Listen Ports can optionally detect Docker containers associated with network sockets. When enabled, the socket table shows:
-- **Container name** — the Docker container name (e.g. `nginx`, `postgres`)
-- **Image** — the container image (shown as tooltip)
+- **Container name** — displayed as a purple badge in the Container column
+- **Image** — shown as a tooltip on hover over the container badge
 - **Network mode** — `host`, `bridge`, or other
 
 ### Enabling
 
-1. Mount the Docker socket (read-only) in `docker-compose.yml`:
-   ```yaml
-   volumes:
-     - /proc:/host-proc:ro
-     - /var/run/docker.sock:/var/run/docker.sock:ro
-   environment:
-     - DOCKER_HOST=/var/run/docker.sock
-   ```
+Uncomment the Docker socket lines in `docker-compose.yml`:
 
-2. Restart: `docker compose up -d`
+```yaml
+volumes:
+  - /proc:/host-proc:ro
+  - /var/run/docker.sock:/var/run/docker.sock:ro   # ← uncomment
+environment:
+  DOCKER_HOST: "/var/run/docker.sock"               # ← uncomment
+```
+
+Then restart: `docker compose up -d`
 
 ### How it works
 
-- **Host-network containers** — matched by PID (process ID inside the container equals host PID)
-- **Bridge-network containers** — matched by port binding (container's published port matches the socket's local port)
-- Container data is cached for 10 seconds to avoid hammering the Docker API
+- **Host-network containers** — matched by PID. The container's host PID (from Docker inspect API) is matched against the process owning each socket.
+- **Bridge-network containers** — matched by port binding. The container's published host port is matched against the socket's local port.
+- Container data is cached for 10 seconds to minimize Docker API calls.
 
 ### Security considerations
 
@@ -206,39 +214,40 @@ cd frontend && npm test
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│  Single Container (ports)                             │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │  Go Binary :8080                                │ │
-│  │  ┌────────────────────────────────────────────┐  │ │
-│  │  │  Embedded Vue.js SPA (go:embed)            │  │ │
-│  │  │  Polls /api/sockets every 5s               │  │ │
-│  │  └────────────────────────────────────────────┘  │ │
-│  │  ┌────────────────────────────────────────────┐  │ │
-│  │  │  Go Backend                                │  │ │
-│  │  │  /proc/net/{tcp,tcp6,udp,udp6}            │  │ │
-│  │  │  /proc/[pid]/fd → process map             │  │ │
-│  │  │  singleflight cache (TTL)                  │  │ │
-│  │  │  Optional ADMIN_TOKEN auth                 │  │ │
-│  │  └────────────────────────────────────────────┘  │ │
-│  └──────────────────────────────────────────────────┘ │
-│  Volume: /proc → /host-proc (read-only)              │
-│  Volume: /var/run/docker.sock (optional, :ro)        │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ Single Container (ports)                                 │
+│ ┌──────────────────────────────────────────────────────┐ │
+│ │ Go Binary :8080                                      │ │
+│ │ ┌──────────────────────────────────────────────────┐ │ │
+│ │ │ Embedded Vue.js SPA (go:embed)                   │ │ │
+│ │ │ Polls /api/sockets every 5s                      │ │ │
+│ │ └──────────────────────────────────────────────────┘ │ │
+│ │ ┌──────────────────────────────────────────────────┐ │ │
+│ │ │ Go Backend                                       │ │ │
+│ │ │ /proc/net/{tcp,tcp6,udp,udp6}                    │ │ │
+│ │ │ /proc/[pid]/fd → process map                     │ │ │
+│ │ │ singleflight cache (TTL)                         │ │ │
+│ │ │ ADMIN_TOKEN auth                                 │ │ │
+│ │ │ Docker monitor (optional)                        │ │ │
+│ │ └──────────────────────────────────────────────────┘ │ │
+│ └──────────────────────────────────────────────────────┘ │
+│ Volume: /proc → /host-proc (read-only)                   │
+│ Volume: docker.sock (optional, :ro)                      │
+└──────────────────────────────────────────────────────────┘
 ```
 
 **How it works:**
 
-1. **Parser** — reads `/proc/net/{tcp,tcp6,udp,udp6}` and decodes hex addresses, ports, and connection states
+1. **Parser** — reads `/proc/net/{tcp,tcp6,udp,udp6}` via `PROC_PATH` and decodes hex addresses, ports, and connection states
 2. **Mapper** — walks `/proc/[pid]/fd/*` symlinks, matches `socket:[inode]` patterns to resolve the owning process
 3. **Cache** — `singleflight.Group` coalesces concurrent requests; serves stale data if a fresh fetch fails
-4. **API** — `POST /api/auth` for token validation and `GET /api/sockets` for socket data with protocol and IP version filters
-5. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness, optional token-based authentication
-6. **Docker Monitor** (optional) — queries Docker Engine API via unix socket for container metadata, maps containers to sockets by PID (host-network) or port binding (bridge-network)
+4. **Docker Monitor** (optional) — queries Docker Engine API via unix socket for container metadata, maps containers to sockets by PID (host-network) or port binding (bridge-network)
+5. **API** — `POST /api/auth` for token validation, `GET /api/sockets` for socket data with container enrichment, `GET /api/containers` for raw container data
+6. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness, regex search, container column and filter
 
 ## Deployment
 
-The project ships as a single Docker container with the Vue.js frontend embedded in the Go binary:
+The project ships as a single Docker container with the Vue.js frontend embedded in the Go binary via `//go:embed`:
 
 | Service | Base Image | Notes |
 |---------|-----------|-------|
@@ -246,9 +255,8 @@ The project ships as a single Docker container with the Vue.js frontend embedded
 
 ### Security
 
-- **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close).
+- **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close). When unset, the application is freely accessible.
 - **Hardened container**: No host modes (`pid: host`, `network_mode: host`). Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem, all capabilities dropped except `SYS_PTRACE` (required for process name resolution via `/proc/[pid]/fd/`). No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
-- **No auth mode**: When `ADMIN_TOKEN` is unset, the application is freely accessible. Only use this on trusted networks.
 - **Security headers**: `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are set on all responses.
 - **Non-root container**: The process runs as UID 65534 (nobody) inside the container.
 - **TLS**: The server listens on plain HTTP. For production, run behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik).
