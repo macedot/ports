@@ -43,7 +43,7 @@ export function usePolling(store) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       }
       const data = await res.json()
-      store.setSockets(data.sockets, data.updated_at)
+      store.setSockets(data.sockets, data.updated_at, data.docker_error)
       store.setError(null)
     } catch (err) {
       if (err.name === 'AbortError') {

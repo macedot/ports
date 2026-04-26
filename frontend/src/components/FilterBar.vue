@@ -41,7 +41,10 @@
           {{ opt.label }}
         </button>
       </div>
-      <span v-if="!hasContainerData" class="filter-hint" title="Mount docker.sock and set DOCKER_HOST in docker-compose.yml">
+      <span v-if="!hasContainerData && dockerError" class="filter-error" :title="dockerError">
+        🐳 {{ dockerError }}
+      </span>
+      <span v-else-if="!hasContainerData" class="filter-hint" title="Mount docker.sock and set DOCKER_HOST in docker-compose.yml">
         🐳 off
       </span>
     </div>
@@ -53,7 +56,7 @@ import { useSocketsStore } from '../stores/sockets'
 import { storeToRefs } from 'pinia'
 
 const store = useSocketsStore()
-const { protoFilter, ipVerFilter, containerFilter, hasContainerData } = storeToRefs(store)
+const { protoFilter, ipVerFilter, containerFilter, hasContainerData, dockerError } = storeToRefs(store)
 
 const protoOptions = [
   { label: 'TCP', value: 'tcp' },
@@ -145,6 +148,17 @@ const containerOptions = [
   font-size: 10px;
   color: #7c3aed;
   margin-left: 8px;
+  cursor: help;
+}
+
+.filter-error {
+  font-size: 10px;
+  color: #ef4444;
+  margin-left: 8px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: help;
 }
 </style>

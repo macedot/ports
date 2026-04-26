@@ -127,6 +127,8 @@ export const useSocketsStore = defineStore('sockets', () => {
     return ports.size
   })
 
+  const dockerError = ref('')
+
   const hasContainerData = computed(() => {
     return sockets.value.some(s => s.container !== undefined && s.container !== null && s.container !== '')
   })
@@ -139,9 +141,10 @@ export const useSocketsStore = defineStore('sockets', () => {
   })
 
   // Actions
-  function setSockets(data, timestamp) {
+  function setSockets(data, timestamp, err) {
     sockets.value = data
     updatedAt.value = timestamp
+    dockerError.value = err || ''
     triggerRef(sockets)
   }
 
@@ -241,6 +244,7 @@ export const useSocketsStore = defineStore('sockets', () => {
     filteredAndSortedSockets,
     groupCount,
     hasContainerData,
+    dockerError,
     // Actions
     setSockets,
     setProtoFilter,

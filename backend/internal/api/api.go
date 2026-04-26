@@ -128,9 +128,10 @@ type SocketResponse struct {
 }
 
 type SocketsResponse struct {
-	Sockets   []SocketResponse `json:"sockets"`
-	UpdatedAt string           `json:"updated_at"`
-	Count     int              `json:"count"`
+	Sockets     []SocketResponse `json:"sockets"`
+	UpdatedAt   string           `json:"updated_at"`
+	Count       int              `json:"count"`
+	DockerError string           `json:"docker_error,omitempty"`
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -172,20 +173,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Get container data (nil if Docker unavailable)
 	var containers []docker.ContainerInfo
+	var dockerErrStr string
 	if h.dockerCache != nil {
 		var dockerErr error
 		containers, dockerErr = h.dockerCache.Get(r.Context())
 		if dockerErr != nil {
 			log.Printf("Docker container fetch failed: %v", dockerErr)
+			dockerErrStr = dockerErr.Error()
 		}
 	}
 
 	sockets := filterAndEnrichSockets(data, processMap, containers, proto, ipver)
 
 	response := SocketsResponse{
-		Sockets:   sockets,
-		UpdatedAt: updatedAt.Format(time.RFC3339),
-		Count:     len(sockets),
+		Sockets:     sockets,
+		UpdatedAt:   updatedAt.Format(time.RFC3339),
+		Count:       len(sockets),
+		DockerError: dockerErrStr,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
