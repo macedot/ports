@@ -231,6 +231,7 @@ const getSortIndicator = (key) => {
 .table-body {
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .empty-state {
@@ -325,5 +326,8 @@ const getSortIndicator = (key) => {
 }
 .vue-recycle-scroller::-webkit-scrollbar-thumb:hover {
   background: #5a5a7a;
+}
+.table-body .vue-recycle-scroller {
+  height: 100% !important;
 }
 </style>
