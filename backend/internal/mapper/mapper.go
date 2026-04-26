@@ -2,6 +2,7 @@ package mapper
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,11 +35,13 @@ func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 
 		procInfo, err := buildProcessInfo(procPath, pid)
 		if err != nil {
+			log.Printf("mapper: skipping PID %d (buildProcessInfo failed): %v", pid, err)
 			continue
 		}
 
 		inodes, err := readSocketInodes(procPath, pid)
 		if err != nil {
+			log.Printf("mapper: skipping PID %d (readSocketInodes failed): %v", pid, err)
 			continue
 		}
 
@@ -103,6 +106,7 @@ func readSocketInodes(procPath string, pid int) ([]uint64, error) {
 			if os.IsNotExist(err) {
 				continue
 			}
+			log.Printf("mapper: readlink %s failed: %v", linkPath, err)
 			continue
 		}
 
@@ -110,6 +114,7 @@ func readSocketInodes(procPath string, pid int) ([]uint64, error) {
 			inodeStr := target[8 : len(target)-1]
 			inode, err := strconv.ParseUint(inodeStr, 10, 64)
 			if err != nil {
+				log.Printf("mapper: invalid socket inode %q: %v", inodeStr, err)
 				continue
 			}
 			inodes = append(inodes, inode)

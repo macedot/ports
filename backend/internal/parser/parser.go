@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -273,6 +274,7 @@ func parseFile(path string, parseEntry func([]string) (SocketEntry, error)) ([]S
 		}
 		entry, err := parseEntry(strFields)
 		if err != nil {
+			log.Printf("parser: skipping malformed line %d: %v", i, err)
 			continue
 		}
 		entries = append(entries, entry)

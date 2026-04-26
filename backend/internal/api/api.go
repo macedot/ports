@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -172,7 +173,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Get container data (nil if Docker unavailable)
 	var containers []docker.ContainerInfo
 	if h.dockerCache != nil {
-		containers, _ = h.dockerCache.Get(r.Context())
+		var dockerErr error
+		containers, dockerErr = h.dockerCache.Get(r.Context())
+		if dockerErr != nil {
+			log.Printf("Docker container fetch failed: %v", dockerErr)
+		}
 	}
 
 	sockets := filterAndEnrichSockets(data, processMap, containers, proto, ipver)

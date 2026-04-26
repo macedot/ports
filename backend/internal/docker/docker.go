@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -131,7 +132,7 @@ func (c *Collector) Collect(ctx context.Context) ([]ContainerInfo, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query docker: %w", err)
+		return nil, fmt.Errorf("docker socket connect failed (check permissions): %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -169,6 +170,7 @@ func (c *Collector) Collect(ctx context.Context) ([]ContainerInfo, error) {
 			pid, err := c.inspectContainerPID(gctx, containers[i].ID)
 			if err != nil {
 				// Non-fatal: container may have exited between list and inspect
+				log.Printf("docker inspect failed for %s: %v", truncateID(containers[i].ID), err)
 				return nil
 			}
 			result[i].PID = pid
