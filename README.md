@@ -155,17 +155,27 @@ Listen Ports can optionally detect Docker containers associated with network soc
 
 ### Enabling
 
-Uncomment the Docker socket lines in `docker-compose.yml`:
+1. Find your host's Docker group GID:
+   ```bash
+   getent group docker | cut -d: -f3
+   # → 999 (or 1001, etc.)
+   ```
 
-```yaml
-volumes:
-  - /proc:/host-proc:ro
-  - /var/run/docker.sock:/var/run/docker.sock:ro   # ← uncomment
-environment:
-  DOCKER_HOST: "/var/run/docker.sock"               # ← uncomment
-```
+2. Uncomment the Docker socket lines in `docker-compose.yml` **and** add `group_add`:
 
-Then restart: `docker compose up -d`
+   ```yaml
+   volumes:
+     - /proc:/host-proc:ro
+     - /var/run/docker.sock:/var/run/docker.sock:ro   # ← uncomment
+   group_add:
+     - "999"  # ← replace with your host's docker group GID
+   environment:
+     DOCKER_HOST: "/var/run/docker.sock"               # ← uncomment
+   ```
+
+3. Restart: `docker compose up -d`
+
+> **Why `group_add` is required:** The container runs as non-root (UID 65534). The Docker socket on the host is owned by `root:docker` with mode `660`. Adding the container process to the docker group (via `group_add`) grants read access to the socket.
 
 ### How it works
 

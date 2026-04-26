@@ -10,8 +10,13 @@ services:
     volumes:
       - /proc:/host-proc:ro
       # Optional: Docker container monitoring
-      # Uncomment to enable container name/image detection for sockets
+      # Uncomment BOTH the volume AND group_add to enable container detection.
+      # The container runs as UID 65534 (nobody); group_add joins the docker
+      # group so the socket is accessible. Get your host GID with:
+      #   getent group docker | cut -d: -f3
       # - /var/run/docker.sock:/var/run/docker.sock:ro
+    # group_add:
+      # - "999"  # ← replace with your host's docker group GID
     environment:
       PORT: "8080"
       PROC_PATH: "/host-proc"
