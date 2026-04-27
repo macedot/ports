@@ -1,7 +1,6 @@
 package mapper
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -25,6 +24,9 @@ func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 		return nil, fmt.Errorf("failed to read %s: %w", procPath, err)
 	}
 
+	var totalPIDs, fdOK, fdErr, inodesFound, inodesByReadlink int
+	var firstFDErr string
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -35,25 +37,33 @@ func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 		if err != nil {
 			continue
 		}
+		totalPIDs++
 
 		// Read socket inodes FIRST — critical data, never skip on name failure
 		inodes, err := readSocketInodes(procPath, pid)
 		if err != nil {
-			log.Printf("mapper: skipping PID %d (readSocketInodes failed): %v", pid, err)
+			fdErr++
+			if firstFDErr == "" {
+				firstFDErr = fmt.Sprintf("PID %d: %v", pid, err)
+			}
 			continue
 		}
-		if len(inodes) == 0 {
-			continue
-		}
+		fdOK++
+		inodesFound += len(inodes)
+		inodesByReadlink += len(inodes)
 
 		// Try to get process name — non-fatal if it fails
-		name := ""
 		procInfo := buildProcessInfo(procPath, pid)
-		name = procInfo.Name
 
 		for _, inode := range inodes {
-			result[inode] = ProcessInfo{PID: pid, Name: name, Command: procInfo.Command, Exe: procInfo.Exe}
+			result[inode] = ProcessInfo{PID: pid, Name: procInfo.Name, Command: procInfo.Command, Exe: procInfo.Exe}
 		}
+	}
+
+	log.Printf("mapper: PIDs=%d fd_ok=%d fd_err=%d inodes=%d map_size=%d",
+		totalPIDs, fdOK, fdErr, inodesFound, len(result))
+	if fdErr > 0 {
+		log.Printf("mapper: first fd error: %s — process names may be incomplete", firstFDErr)
 	}
 
 	return result, nil
@@ -141,13 +151,7 @@ func readSocketInodes(procPath string, pid int) ([]uint64, error) {
 		linkPath := filepath.Join(fdPath, entry.Name())
 		target, err := os.Readlink(linkPath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			if errors.Is(err, os.ErrPermission) {
-				continue
-			}
-			log.Printf("mapper: readlink %s failed: %v", linkPath, err)
+			// ENOENT and EACCES are expected (racing processes, protected FDs)
 			continue
 		}
 
@@ -155,7 +159,6 @@ func readSocketInodes(procPath string, pid int) ([]uint64, error) {
 			inodeStr := target[8 : len(target)-1]
 			inode, err := strconv.ParseUint(inodeStr, 10, 64)
 			if err != nil {
-				log.Printf("mapper: invalid socket inode %q: %v", inodeStr, err)
 				continue
 			}
 			inodes = append(inodes, inode)
