@@ -64,7 +64,19 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 | `IMAGE_TAG` | `latest` | Image tag for both services |
 | `ADMIN_TOKEN` | _(unset)_ | Uncomment in `docker-compose.yml` to enable authentication |
 
-> The hardened docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `pid: host` or `network_mode: host` required. Socket data (addresses, ports, states) is fully functional. Process name resolution requires `SYS_PTRACE` and `DAC_READ_SEARCH` capabilities (both included in docker-compose).
+### Required Capabilities
+
+> **Process name resolution requires two Linux capabilities that Docker does NOT include by default — even when running as root.** Without them, all process names will be empty:
+>
+> ```yaml
+> cap_add:
+>   - SYS_PTRACE       # read /proc/[pid]/fd/ symlinks
+>   - DAC_READ_SEARCH  # read /proc/[pid]/ directories owned by other UIDs
+> ```
+>
+> The provided `docker-compose.yml` already includes these. If using a custom compose, add them to your service definition.
+
+The docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `pid: host` or `network_mode: host` required. Socket data (addresses, ports, states) is fully functional without any special capabilities — only process name resolution needs them.
 
 ## API
 
