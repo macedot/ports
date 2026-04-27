@@ -76,6 +76,14 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 >   - SYS_PTRACE           # read /proc/[pid]/fd/ symlinks
 > ```
 >
+> **Optional — root user for full resolution:**
+>
+> The default container user is `65534:65534` (nobody). Process names for **root-owned host processes** (sshd, nginx, etc.) will be empty because ptrace requires matching UID or root. To see all process names, uncomment `user: "0:0"` in `docker-compose.yml`:
+>
+> ```yaml
+> user: "0:0"  # run as root — all host processes readable (less secure)
+> ```
+>
 > The provided `docker-compose.yml` already includes these. If using a custom compose, add them to your service definition.
 
 The docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `network_mode: host` required. Socket data (addresses, ports, states) is fully functional without any special configuration — only process name resolution needs `pid: host`.
@@ -300,7 +308,7 @@ The project ships as a single Docker container with the Vue.js frontend embedded
 ### Security
 
 - **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close). When unset, the application is freely accessible.
-- **Hardened container**: No `network_mode: host`. Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem. `pid: host` is required for process name resolution (the kernel only exposes socket→PID mappings via `/proc/[pid]/fd/` readlink, which needs the host PID namespace). `SYS_PTRACE` capability included for fd symlink access. No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
+- **Hardened container**: No `network_mode: host`. Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem. `pid: host` is required for process name resolution (the kernel only exposes socket→PID mappings via `/proc/[pid]/fd/` readlink). Default user is `65534:65534` (nobody) — process names for root-owned host processes will be empty unless you add `user: "0:0"` (less secure). `SYS_PTRACE` capability included for fd symlink access. No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
 - **Security headers**: `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are set on all responses.
 - **Non-root container**: The process runs as UID 65534 (nobody) inside the container.
 - **TLS**: The server listens on plain HTTP. For production, run behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik).
