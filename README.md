@@ -16,10 +16,12 @@
 ## Features
 
 - **All sockets at a glance** — TCP, UDP, IPv4, IPv6 in a single view
-- **Process resolution** — maps socket inodes to owning PID and process name
+- **Process resolution** — maps socket inodes to owning PID and process name, with full command line and executable path
 - **Docker container detection** — shows container name, image, and network mode for sockets (opt-in via Docker socket mount)
-- **Regex search** — filter sockets by any field using regular expressions
+- **Regex search** — filter sockets by any field including command line and executable path
 - **Client-side filtering** — by protocol (TCP / UDP), IP version (4 / 6), and container (All / With Container / No Container)
+- **Freeze/Pause** — pause live updates to inspect a snapshot; resume with one click
+- **CSV & JSON export** — download the current filtered view as CSV or JSON
 - **Column sorting** — click any column header to sort ascending or descending
 - **Port grouping** — sockets grouped by local port with collapsible groups
 - **Virtual scrolling** — handles thousands of sockets without lag
@@ -62,7 +64,7 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 | `IMAGE_TAG` | `latest` | Image tag for both services |
 | `ADMIN_TOKEN` | _(unset)_ | Uncomment in `docker-compose.yml` to enable authentication |
 
-> The hardened docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `pid: host` or `network_mode: host` required. Socket data (addresses, ports, states) is fully functional. Process name resolution requires `SYS_PTRACE` capability (included in docker-compose).
+> The hardened docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `pid: host` or `network_mode: host` required. Socket data (addresses, ports, states) is fully functional. Process name resolution requires `SYS_PTRACE` and `DAC_READ_SEARCH` capabilities (both included in docker-compose).
 
 ## API
 
@@ -109,6 +111,8 @@ Returns all socket entries with optional filtering.
       "remote_port": 0,
       "state": "LISTEN",
       "process": "nginx",
+      "command": "nginx: worker process",
+      "exe": "/usr/sbin/nginx",
       "container": "nginx",
       "c_image": "nginx:alpine",
       "c_network": "bridge"
@@ -119,7 +123,7 @@ Returns all socket entries with optional filtering.
 }
 ```
 
-The `container`, `c_image`, and `c_network` fields are only present when Docker monitoring is enabled and a container match is found.
+The `command`, `exe`, `container`, `c_image`, and `c_network` fields are only present when the data is available (omitted when empty).
 
 ### `GET /api/containers`
 
@@ -145,6 +149,20 @@ Returns all Docker containers with port mappings and metadata. Requires authenti
   ]
 }
 ```
+
+## Process Name Resolution
+
+The mapper resolves process names using a multi-source fallback chain:
+
+1. **`/proc/[pid]/status`** — reads the `Name:` field (kernel comm name, limited to 15 chars)
+2. **`/proc/[pid]/comm`** — reads the comm file directly
+3. **`/proc/[pid]/cmdline`** — reads the full command line, extracts basename of first argument
+4. **`/proc/[pid]/exe`** — readlink on the exe symlink, extracts basename (e.g. `/usr/bin/docker-proxy` → `docker-proxy`)
+5. **`pid:1234`** — last resort showing only the PID number
+
+The `command` field always contains the full command line with arguments (when readable). The `exe` field contains the full executable path. Hovering over the process name in the UI shows a tooltip with the full command and executable path.
+
+> **Note:** The `DAC_READ_SEARCH` capability in docker-compose allows the container to read `/proc/[pid]/` directories owned by other UIDs on the host. Without it, process names will be empty for most processes.
 
 ## Docker Container Monitoring (Optional)
 
@@ -230,17 +248,20 @@ cd frontend && npm test
 │ │ ┌──────────────────────────────────────────────────┐ │ │
 │ │ │ Embedded Vue.js SPA (go:embed)                   │ │ │
 │ │ │ Polls /api/sockets every 5s                      │ │ │
+│ │ │ Freeze toggle + CSV/JSON export                  │ │ │
 │ │ └──────────────────────────────────────────────────┘ │ │
 │ │ ┌──────────────────────────────────────────────────┐ │ │
 │ │ │ Go Backend                                       │ │ │
 │ │ │ /proc/net/{tcp,tcp6,udp,udp6}                    │ │ │
 │ │ │ /proc/[pid]/fd → process map                     │ │ │
+│ │ │ /proc/[pid]/{status,comm,cmdline,exe}            │ │ │
 │ │ │ singleflight cache (TTL)                         │ │ │
 │ │ │ ADMIN_TOKEN auth                                 │ │ │
 │ │ │ Docker monitor (optional)                        │ │ │
 │ │ └──────────────────────────────────────────────────┘ │ │
 │ └──────────────────────────────────────────────────────┘ │
 │ Volume: /proc → /host-proc (read-only)                   │
+│ Volume: /etc/localtime (read-only)                        │
 │ Volume: docker.sock (optional, :ro)                      │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -248,11 +269,11 @@ cd frontend && npm test
 **How it works:**
 
 1. **Parser** — reads `/proc/net/{tcp,tcp6,udp,udp6}` via `PROC_PATH` and decodes hex addresses, ports, and connection states
-2. **Mapper** — walks `/proc/[pid]/fd/*` symlinks, matches `socket:[inode]` patterns to resolve the owning process
+2. **Mapper** — walks `/proc/[pid]/fd/*` symlinks, matches `socket:[inode]` patterns to resolve the owning process. Falls back through status → comm → cmdline → exe for name resolution.
 3. **Cache** — `singleflight.Group` coalesces concurrent requests; serves stale data if a fresh fetch fails
 4. **Docker Monitor** (optional) — queries Docker Engine API via unix socket for container metadata, maps containers to sockets by PID (host-network) or port binding (bridge-network)
-5. **API** — `POST /api/auth` for token validation, `GET /api/sockets` for socket data with container enrichment, `GET /api/containers` for raw container data
-6. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness, regex search, container column and filter
+5. **API** — `POST /api/auth` for token validation, `GET /api/sockets` for socket data with process info and container enrichment, `GET /api/containers` for raw container data
+6. **Frontend** — Pinia store with `shallowRef` for efficient updates, composable for polling with visibility API awareness and freeze toggle, regex search across all fields, CSV/JSON export, container column and filter
 
 ## Deployment
 
@@ -265,7 +286,7 @@ The project ships as a single Docker container with the Vue.js frontend embedded
 ### Security
 
 - **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close). When unset, the application is freely accessible.
-- **Hardened container**: No host modes (`pid: host`, `network_mode: host`). Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem, all capabilities dropped except `SYS_PTRACE` (required for process name resolution via `/proc/[pid]/fd/`). No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
+- **Hardened container**: No host modes (`pid: host`, `network_mode: host`). Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem, all capabilities dropped except `SYS_PTRACE` (required for `/proc/[pid]/fd/` access) and `DAC_READ_SEARCH` (required to read `/proc/[pid]/` directories owned by other UIDs). No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
 - **Security headers**: `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are set on all responses.
 - **Non-root container**: The process runs as UID 65534 (nobody) inside the container.
 - **TLS**: The server listens on plain HTTP. For production, run behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik).

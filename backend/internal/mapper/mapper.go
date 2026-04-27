@@ -60,16 +60,13 @@ func BuildProcessMap(procPath string) (map[uint64]ProcessInfo, error) {
 }
 
 func buildProcessInfo(procPath string, pid int) *ProcessInfo {
-	name, nameErr := readProcessName(procPath, pid)
+	name, _ := readProcessName(procPath, pid)
 	command := readCommandLine(procPath, pid)
 	exe := readExePath(procPath, pid)
 
 	// Fallback: use exe basename when status/comm/cmdline all fail
 	if name == "" && exe != "" {
-		log.Printf("mapper: PID %d using exe basename as name: %s (readProcessName error: %v)", pid, filepath.Base(exe), nameErr)
 		name = filepath.Base(exe)
-	} else if name == "" && exe == "" {
-		log.Printf("mapper: PID %d name and exe both unreadable (readProcessName error: %v)", pid, nameErr)
 	}
 
 	return &ProcessInfo{PID: pid, Name: name, Command: command, Exe: exe}
@@ -88,7 +85,6 @@ func readExePath(procPath string, pid int) string {
 	exePath := filepath.Join(procPath, strconv.Itoa(pid), "exe")
 	target, err := os.Readlink(exePath)
 	if err != nil {
-		log.Printf("mapper: readlink %s failed: %v", exePath, err)
 		return ""
 	}
 	return target

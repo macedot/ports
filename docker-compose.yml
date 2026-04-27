@@ -36,6 +36,7 @@ services:
       - ALL
     cap_add:
       - SYS_PTRACE
+      - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
     deploy:
