@@ -17,7 +17,6 @@ import (
 	"listen-ports/internal/api"
 	"listen-ports/internal/cache"
 	"listen-ports/internal/docker"
-	"listen-ports/internal/mapper"
 	"listen-ports/internal/parser"
 	"listen-ports/ui"
 )
@@ -133,10 +132,13 @@ func main() {
 }
 
 func checkProcessCapabilities(procPath string) {
-	// Try reading a known PID's fd directory to detect capability issues early
+	// Try reading a known PID's fd directory to detect capability/namespace issues early.
+	// The mapper needs readlink on /proc/[pid]/fd/[n] to map socket inodes to PIDs.
+	// This requires the container to share the host's PID namespace (pid: host)
+	// and have SYS_PTRACE capability.
 	entries, err := os.ReadDir(procPath)
 	if err != nil {
-		log.Printf("WARNING: cannot read %s: %v — socket data may work but process resolution will fail", procPath, err)
+		log.Printf("WARNING: cannot read %s: %v — process resolution will fail", procPath, err)
 		return
 	}
 	for _, entry := range entries {
@@ -148,18 +150,30 @@ func checkProcessCapabilities(procPath string) {
 			continue
 		}
 		fdPath := filepath.Join(procPath, entry.Name(), "fd")
-		if _, err := os.ReadDir(fdPath); err != nil {
+
+		// Step 1: check if we can list the fd directory
+		fdEntries, err := os.ReadDir(fdPath)
+		if err != nil {
 			log.Printf("WARNING: cannot read %s: %v", fdPath, err)
-			log.Printf("WARNING: process names will be empty — add SYS_PTRACE and DAC_READ_SEARCH capabilities")
+			log.Printf("WARNING: process names will be empty — container must run with 'pid: host' and 'cap_add: SYS_PTRACE'")
+			log.Printf("WARNING: without pid:host, container capabilities don't apply to host /proc readlink operations")
 			return
 		}
-		// Successfully read at least one PID's fd dir
-		_, nameErr := mapper.BuildProcessMap(procPath)
-		if nameErr != nil {
-			log.Printf("WARNING: process map build test failed: %v", nameErr)
-		} else {
-			log.Println("Process resolution: OK")
+
+		// Step 2: check if we can readlink a fd entry (the actual socket:[inode] resolution)
+		for _, fdEntry := range fdEntries {
+			linkPath := filepath.Join(fdPath, fdEntry.Name())
+			if _, err := os.Readlink(linkPath); err != nil {
+				log.Printf("WARNING: readlink %s failed: %v", linkPath, err)
+				log.Printf("WARNING: process names will be empty — container must run with 'pid: host' and 'cap_add: SYS_PTRACE'")
+				log.Printf("WARNING: without pid:host, container capabilities don't apply to host /proc readlink operations")
+				return
+			}
+			break // one successful readlink is enough
 		}
+
+		// Both checks passed
+		log.Println("Process resolution: OK")
 		return
 	}
 	log.Println("WARNING: no processes found in", procPath)

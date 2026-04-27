@@ -64,19 +64,21 @@ GHCR_OWNER=macedot IMAGE_TAG=latest docker compose up
 | `IMAGE_TAG` | `latest` | Image tag for both services |
 | `ADMIN_TOKEN` | _(unset)_ | Uncomment in `docker-compose.yml` to enable authentication |
 
-### Required Capabilities
+### Required Configuration for Process Names
 
-> **Process name resolution requires two Linux capabilities that Docker does NOT include by default — even when running as root.** Without them, all process names will be empty:
+> **Process name resolution requires `pid: host` and `SYS_PTRACE` capability.** Without these, socket data (addresses, ports, states) works fine but all process names will be empty.
+>
+> The Linux kernel only exposes socket→PID mappings via `/proc/[pid]/fd/` symlinks. Reading these symlinks requires `ptrace_may_access` in the **host's** PID namespace — container capabilities don't transfer to the host namespace. `pid: host` makes the container share the host's PID namespace so capabilities apply.
 >
 > ```yaml
+> pid: host                # share host PID namespace (required for process resolution)
 > cap_add:
->   - SYS_PTRACE       # read /proc/[pid]/fd/ symlinks
->   - DAC_READ_SEARCH  # read /proc/[pid]/ directories owned by other UIDs
+>   - SYS_PTRACE           # read /proc/[pid]/fd/ symlinks
 > ```
 >
 > The provided `docker-compose.yml` already includes these. If using a custom compose, add them to your service definition.
 
-The docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `pid: host` or `network_mode: host` required. Socket data (addresses, ports, states) is fully functional without any special capabilities — only process name resolution needs them.
+The docker-compose mounts the host's `/proc` read-only at `/host-proc` via `PROC_PATH`. No `network_mode: host` required. Socket data (addresses, ports, states) is fully functional without any special configuration — only process name resolution needs `pid: host`.
 
 ## API
 
@@ -174,7 +176,7 @@ The mapper resolves process names using a multi-source fallback chain:
 
 The `command` field always contains the full command line with arguments (when readable). The `exe` field contains the full executable path. Hovering over the process name in the UI shows a tooltip with the full command and executable path.
 
-> **Note:** The `DAC_READ_SEARCH` capability in docker-compose allows the container to read `/proc/[pid]/` directories owned by other UIDs on the host. Without it, process names will be empty for most processes.
+> **Note:** Process name resolution requires `pid: host` in docker-compose. The kernel only exposes socket→PID ownership via `/proc/[pid]/fd/` symlinks, which requires ptrace access in the host PID namespace. Without `pid: host`, process names will be empty. The startup log will print a clear warning when this is misconfigured.
 
 ## Docker Container Monitoring (Optional)
 
@@ -298,7 +300,7 @@ The project ships as a single Docker container with the Vue.js frontend embedded
 ### Security
 
 - **Authentication**: Set the `ADMIN_TOKEN` environment variable to enable token-based authentication. When set, a login form is shown and all API requests require the token via `Authorization: Bearer` header. Token is stored in `sessionStorage` (cleared on tab close). When unset, the application is freely accessible.
-- **Hardened container**: No host modes (`pid: host`, `network_mode: host`). Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem, all capabilities dropped except `SYS_PTRACE` (required for `/proc/[pid]/fd/` access) and `DAC_READ_SEARCH` (required to read `/proc/[pid]/` directories owned by other UIDs). No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
+- **Hardened container**: No `network_mode: host`. Host `/proc` mounted read-only at `/host-proc`. Read-only root filesystem. `pid: host` is required for process name resolution (the kernel only exposes socket→PID mappings via `/proc/[pid]/fd/` readlink, which needs the host PID namespace). `SYS_PTRACE` capability included for fd symlink access. No-new-privileges enforced. Resource limits: 128MB memory, 0.5 CPU.
 - **Security headers**: `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` are set on all responses.
 - **Non-root container**: The process runs as UID 65534 (nobody) inside the container.
 - **TLS**: The server listens on plain HTTP. For production, run behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik).

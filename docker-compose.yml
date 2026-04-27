@@ -22,6 +22,7 @@ services:
       #
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     # user: "65534:999"
+    pid: host  # required: process resolution needs host PID namespace
     environment:
       PORT: "8080"
       PROC_PATH: "/host-proc"
@@ -32,11 +33,8 @@ services:
     tmpfs:
       - /tmp
       - /run
-    cap_drop:
-      - ALL
     cap_add:
-      - SYS_PTRACE       # required for /proc/[pid]/fd/ access
-      - DAC_READ_SEARCH  # required to read /proc/[pid]/ dirs owned by other UIDs
+      - SYS_PTRACE  # required for readlink /proc/[pid]/fd/ (socket→PID mapping)
     security_opt:
       - no-new-privileges:true
     deploy:
