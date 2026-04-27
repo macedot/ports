@@ -17,7 +17,8 @@ COPY backend/ .
 # Copy frontend dist into the ui/dist directory for go:embed
 COPY --from=frontend-build /app/dist ./ui/dist/
 ENV CGO_ENABLED=0
-RUN go build -ldflags="-w -s" -o /app/server .
+ARG VERSION=dev
+RUN go build -ldflags="-w -s -X main.version=${VERSION}" -o /app/server .
 
 # Stage 3: Minimal runtime
 FROM gcr.io/distroless/static-debian12

@@ -109,10 +109,11 @@ type Handler struct {
 	cache       *cache.Cache
 	dockerCache *docker.Cache
 	procPath    string
+	version     string
 }
 
-func NewHandler(cache *cache.Cache, procPath string, dockerCache *docker.Cache) *Handler {
-	return &Handler{cache: cache, procPath: procPath, dockerCache: dockerCache}
+func NewHandler(cache *cache.Cache, procPath string, dockerCache *docker.Cache, version string) *Handler {
+	return &Handler{cache: cache, procPath: procPath, dockerCache: dockerCache, version: version}
 }
 
 type SocketResponse struct {
@@ -134,6 +135,7 @@ type SocketsResponse struct {
 	Sockets     []SocketResponse `json:"sockets"`
 	UpdatedAt   string           `json:"updated_at"`
 	Count       int              `json:"count"`
+	Version     string           `json:"version"`
 	DockerError string           `json:"docker_error,omitempty"`
 }
 
@@ -192,6 +194,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Sockets:     sockets,
 		UpdatedAt:   updatedAt.Format(time.RFC3339),
 		Count:       len(sockets),
+		Version:     h.version,
 		DockerError: dockerErrStr,
 	}
 

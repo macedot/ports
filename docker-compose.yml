@@ -35,8 +35,8 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - SYS_PTRACE
-      - DAC_READ_SEARCH
+      - SYS_PTRACE       # required for /proc/[pid]/fd/ access
+      - DAC_READ_SEARCH  # required to read /proc/[pid]/ dirs owned by other UIDs
     security_opt:
       - no-new-privileges:true
     deploy:

@@ -3,6 +3,7 @@
     <header class="header">
       <div class="header-left">
         <h1 class="title">PORTS</h1>
+        <span v-if="serverVersion" class="version">v{{ serverVersion }}</span>
       </div>
       <div class="header-right">
         <span v-if="updatedAt" class="timestamp">{{ formatTime(updatedAt) }}</span>
@@ -54,7 +55,7 @@ import FilterBar from './components/FilterBar.vue'
 import SocketTable from './components/SocketTable.vue'
 
 const store = useSocketsStore()
-const { error, isLoading, updatedAt } = storeToRefs(store)
+const { error, isLoading, updatedAt, serverVersion } = storeToRefs(store)
 const { refresh, isFrozen, toggleFreeze } = usePolling(store)
 
 // Auth state
@@ -185,6 +186,7 @@ watch(() => needsAuth.value, (val) => {
 .header-left {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .title {
@@ -192,6 +194,16 @@ watch(() => needsAuth.value, (val) => {
   font-weight: 700;
   color: #e0e0ff;
   letter-spacing: 2px;
+}
+
+.version {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: #4a4a6a;
+  background: #252540;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
 }
 
 .header-right {

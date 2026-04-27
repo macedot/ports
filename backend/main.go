@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -15,15 +17,21 @@ import (
 	"listen-ports/internal/api"
 	"listen-ports/internal/cache"
 	"listen-ports/internal/docker"
+	"listen-ports/internal/mapper"
 	"listen-ports/internal/parser"
 	"listen-ports/ui"
 )
+
+// version is set via -ldflags at build time
+var version = "dev"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "/health" {
 		fmt.Println("ok")
 		os.Exit(0)
 	}
+
+	log.Printf("Listen Ports %s starting", version)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -34,6 +42,9 @@ func main() {
 	if procPath == "" {
 		procPath = "/proc"
 	}
+
+	// Startup diagnostic: check if process resolution will work
+	checkProcessCapabilities(procPath)
 
 	fetchFunc := func() ([]parser.SocketEntry, error) {
 		tcp, err := parser.ParseTCP(procPath)
@@ -77,7 +88,7 @@ func main() {
 		log.Println("Docker monitoring disabled (DOCKER_HOST not set)")
 	}
 
-	h := api.NewHandler(c, procPath, dockerCache)
+	h := api.NewHandler(c, procPath, dockerCache, version)
 
 	adminToken := os.Getenv("ADMIN_TOKEN")
 	if adminToken == "" {
@@ -119,6 +130,39 @@ func main() {
 		log.Fatalf("Server forced shutdown: %v\n", err)
 	}
 	log.Println("Server stopped")
+}
+
+func checkProcessCapabilities(procPath string) {
+	// Try reading a known PID's fd directory to detect capability issues early
+	entries, err := os.ReadDir(procPath)
+	if err != nil {
+		log.Printf("WARNING: cannot read %s: %v — socket data may work but process resolution will fail", procPath, err)
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		fdPath := filepath.Join(procPath, entry.Name(), "fd")
+		if _, err := os.ReadDir(fdPath); err != nil {
+			log.Printf("WARNING: cannot read %s: %v", fdPath, err)
+			log.Printf("WARNING: process names will be empty — add SYS_PTRACE and DAC_READ_SEARCH capabilities")
+			return
+		}
+		// Successfully read at least one PID's fd dir
+		_, nameErr := mapper.BuildProcessMap(procPath)
+		if nameErr != nil {
+			log.Printf("WARNING: process map build test failed: %v", nameErr)
+		} else {
+			log.Println("Process resolution: OK")
+		}
+		return
+	}
+	log.Println("WARNING: no processes found in", procPath)
 }
 
 func securityHeaders(next http.Handler) http.Handler {

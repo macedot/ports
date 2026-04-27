@@ -16,6 +16,7 @@ export const useSocketsStore = defineStore('sockets', () => {
   const searchQuery = ref('')
   const searchRegex = ref(null)
   const searchError = ref(null)
+  const serverVersion = ref('')
 
   // Getters
   const filteredSockets = computed(() => {
@@ -141,10 +142,11 @@ export const useSocketsStore = defineStore('sockets', () => {
   })
 
   // Actions
-  function setSockets(data, timestamp, err) {
+  function setSockets(data, timestamp, err, ver) {
     sockets.value = data
     updatedAt.value = timestamp
     dockerError.value = err || ''
+    if (ver) serverVersion.value = ver
     triggerRef(sockets)
   }
 
@@ -245,6 +247,7 @@ export const useSocketsStore = defineStore('sockets', () => {
     groupCount,
     hasContainerData,
     dockerError,
+    serverVersion,
     // Actions
     setSockets,
     setProtoFilter,
