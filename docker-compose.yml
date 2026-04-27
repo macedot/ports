@@ -23,6 +23,8 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     # user: "65534:999"
     pid: host  # required: process resolution needs host PID namespace
+    # user: "0:0"  # uncomment to run as root for full process resolution
+    #                (image default is 65534:65534 — some host processes may be unreadable)
     environment:
       PORT: "8080"
       PROC_PATH: "/host-proc"
